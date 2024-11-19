@@ -74,7 +74,8 @@ dp' b = let dpM = memo dp' in do
                 return $ Stats NA (e + expectation e')
             Draw -> do
                 -- should be the solution of some system but table too big 
-                return $ Stats NA 0
+                e' <- dpM (blackjack0 { multiplier_ = multiplier_ b + 1 })
+                return $ Stats NA $ expectation e' + if bet b then bribeM b - 1 else 0
             Lose -> do
                 return $ Stats NA $ if bet b then (-1) else 0
             Play -> do
