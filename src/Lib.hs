@@ -9,11 +9,13 @@ import qualified Data.Map as M
 import Control.Monad.Trans.State.Lazy
     ( execState, get, modify, State )
 import Control.Monad ( forM )
-import Data.List ( sortOn )
-import Data.Serialize ( Serialize, encode, decode ) 
+import Data.List ( sortOn, groupBy )
+import Data.Serialize ( Serialize, encode, decode )
 import GHC.Generics ( Generic )
 import qualified Data.ByteString as BS
 import Data.Either ( fromRight )
+import Data.Function (on)
+import Data.Bifunctor (first)
 
 {-
 The python is bad but has the right idea.
@@ -47,6 +49,8 @@ type DP = M.Map Blackjack Stats
 blackjack0 :: Blackjack
 blackjack0 = Blackjack (Hand 0 False) (Hand 0 False) False 0 0 0 True
 
+-- use Control.Monad.Memo
+
 memo :: (Blackjack -> State DP Stats) -> Blackjack -> State DP Stats
 memo f b = do
     m <- get
@@ -62,7 +66,7 @@ dp' b = let dpM = memo dp' in do
     -- we cut off the table at 5.1 thank you
     -- just look at the bit between 2.0 and 4.0
     -- alternative is matrix but the system is too big
-    
+
     -- _ <- traceShow b (return ())
     if multiplier_ b > 30 {-5.0-} then
         return $ Stats Stand 0
@@ -80,19 +84,20 @@ dp' b = let dpM = memo dp' in do
                 return $ Stats NA $ if bet b then (-1) else 0
             Play -> do
                 if you b == mempty then do
-                    essNoBet <- forM (liftA2 (<>) draw draw) $ \ drawYou ->
+                    {- essNoBet <- forM (liftA2 (<>) draw draw) $ \ drawYou ->
                            forM (liftA2 (<>) draw draw) $ \ drawDealer ->
                            dpM (b { you = drawYou , dealer = drawDealer , bet = False })
-                    let eNoBet = average $ expectation <$> concat essNoBet
+                    let eNoBet = average $ expectation <$> concat essNoBet -}
+                    -- for current params, bet is always True
                     essBet <- forM (liftA2 (<>) draw draw) $ \ drawYou ->
                            forM (liftA2 (<>) draw draw) $ \ drawDealer ->
                            dpM (b { you = drawYou , dealer = drawDealer , bet = True })
                     let eBet = average $ expectation <$> concat essBet
-
-                    if eBet > eNoBet then
+                    return $ Stats (Bet True) eBet
+                    {- if eBet > eNoBet then
                         return $ Stats (Bet True) eBet
                     else
-                        return $ Stats (Bet False) eNoBet
+                        return $ Stats (Bet False) eNoBet -}
                 else if stand b then do
                     esHit <- forM draw $ \ drawDealer ->
                                  dpM (b { dealer = dealer b <> drawDealer })
@@ -128,7 +133,7 @@ multiplier :: Blackjack -> Double
 multiplier = (2+) . (*0.1) . fromIntegral . multiplier_
 
 bribeM :: Blackjack -> Double
-bribeM = (0.75 ^) . bribeM_ 
+bribeM = (0.75 ^) . bribeM_
 
 dp :: DP
 dp = execState (memo dp' blackjack0) mempty
@@ -136,21 +141,44 @@ dp = execState (memo dp' blackjack0) mempty
 
 computeAndStore :: IO ()
 computeAndStore = do
-    _ <- BS.writeFile "holocure_blackjack_0bet.bin" $ encode dp 
+    _ <- BS.writeFile "holocure_blackjack_0bet.bin" $ encode dp
     return ()
 
-dpFromFile :: IO DP
-dpFromFile = fromRight (error "bad read: dpFromFile") . decode <$> BS.readFile "holocure_blackjack_0bet.bin"
+dpf_ :: IO DP
+dpf_ = fromRight (error "bad read: dpFromFile") . decode <$> BS.readFile "holocure_blackjack_0bet.bin"
+
+dpf :: IO DP
+dpf = M.filterWithKey f <$> dpf_
+    where
+    f b s = action s /= NA && multiplier_ b < 20
 
 poll :: DP -> (Int, Int) -> (Int, Int) -> Int -> Int -> Int -> Stats
 poll dp (y, ya) (d, da) m b mb = dp M.! blackjack0 { you = Hand y (ya > 0) , dealer = Hand d (da > 0) , multiplier_ = m , bribe = b , bribeM_ = mb }
 
--- 1. TODO
+dpf' :: IO (M.Map (Hand, Hand, Int, Int) [(Blackjack, Stats)])
+dpf' = M.mapKeysWith (++) (\ b -> (you b , dealer b , bribe b , bribeM_ b)) . fmap (:[]) . graph <$> dpf
+
+crude :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
+crude = fmap (fmap go) dpf'
+    where
+    go :: [(Blackjack, Stats)] -> [(Int, Action)]
+    go = fmap pick . groupBy ((==) `on` action . snd) . sortOn fst . fmap (first multiplier_)
+
+    pick :: [(Int, Stats)] -> (Int, Action)
+    pick xs@(x : _) = (minimum (fst <$> xs), action $ snd x)
+    pick [] = error "crude:pick: This is bad."
+
+cf :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
+cf = fromRight (error "bad read: cf") . decode <$> BS.readFile "holocure_blackjack_crude_expect.bin"
+
+-- TODO have fun chiseling at cf
+
+-- 1.
 -- poll dpf (20, 0) (20, 0) 10 3 3
 -- is a Hit but it should be Stand? (is this because draw is completely wrong? lol)
 -- maybe just use a rescaled E from a higher multiplier
 
--- 2. TODO
+-- 2. 
 -- we maximize the E of one run
 -- this is bad
 -- you want to maximize: the expected geometric growth rate
@@ -160,15 +188,24 @@ poll dp (y, ya) (d, da) m b mb = dp M.! blackjack0 { you = Hand y (ya > 0) , dea
 
 -- solution: just run it at 0.0, 0.05, 0.1 and see what happens
 
+-- 4. TODO
+-- does the capped kelly bet really tend to the expectation bet for bank >> cap?
+
+-- TODO remove bet :: Bool because it is constantly True
+
+-- nub $ concat $ catMaybes $ [cf' M.!? (Hand x False, Hand y False, 0, 0) | x <- [1..11], y <- [0..21]]
+
+graph :: M.Map k a -> M.Map k (k, a)
+graph = M.mapWithKey (,)
 
 instance Semigroup Hand where
-    (Hand x y) <> (Hand z w) 
+    (Hand x y) <> (Hand z w)
       | y && w    = Hand (x + z + 1) True
       | otherwise = Hand (x + z) (y || w)
 
 instance Monoid Hand where
     mempty = Hand 0 False
-    
+
 
 average :: Fractional a => [a] -> a
 average xs = sum xs / fromIntegral (length xs)
