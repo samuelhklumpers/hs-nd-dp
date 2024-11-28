@@ -1,6 +1,8 @@
 module Main (main) where
 
-import Lib
+import Blackjack
 
 main :: IO ()
 main = computeAndStore
+
+-- TODO DP for jumpking checkpoints

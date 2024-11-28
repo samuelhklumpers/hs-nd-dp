@@ -25,6 +25,8 @@ source-repository head
 
 library
   exposed-modules:
+      Blackjack
+      DP
       Lib
   other-modules:
       Paths_blackjack
@@ -39,6 +41,7 @@ library
     , cereal
     , containers
     , hmatrix
+    , monad-memo
     , transformers
   default-language: Haskell2010
 

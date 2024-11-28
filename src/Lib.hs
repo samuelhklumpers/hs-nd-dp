@@ -2,6 +2,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Lib
     ( module Lib ) where
 
@@ -51,8 +53,8 @@ blackjack0 = Blackjack (Hand 0 False) (Hand 0 False) False 0 0 0 True
 
 -- use Control.Monad.Memo
 
-memo :: (Blackjack -> State DP Stats) -> Blackjack -> State DP Stats
-memo f b = do
+memoOld :: (Blackjack -> State DP Stats) -> Blackjack -> State DP Stats
+memoOld f b = do
     m <- get
     case m M.!? b of
         Just v  -> return v
@@ -61,8 +63,11 @@ memo f b = do
             modify $ M.insert b v
             return v
 
+ldist :: Functor f => (f a, t) -> f (a, t)
+ldist (m, x) = (, x) <$> m
+
 dp' :: Blackjack -> State DP Stats
-dp' b = let dpM = memo dp' in do
+dp' b = let dpM = memoOld dp' in do
     -- we cut off the table at 5.1 thank you
     -- just look at the bit between 2.0 and 4.0
     -- alternative is matrix but the system is too big
@@ -136,7 +141,7 @@ bribeM :: Blackjack -> Double
 bribeM = (0.75 ^) . bribeM_
 
 dp :: DP
-dp = execState (memo dp' blackjack0) mempty
+dp = execState (memoOld dp' blackjack0) mempty
 -- this doesn't understand stability, I think
 
 computeAndStore :: IO ()
