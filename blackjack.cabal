@@ -28,6 +28,7 @@ library
       Blackjack
       DP
       Lib
+      Probability
   other-modules:
       Paths_blackjack
   autogen-modules:
@@ -42,6 +43,7 @@ library
     , containers
     , hmatrix
     , monad-memo
+    , mtl
     , transformers
   default-language: Haskell2010
 
@@ -61,6 +63,7 @@ executable blackjack-exe
     , cereal
     , containers
     , hmatrix
+    , mtl
     , transformers
   default-language: Haskell2010
 
@@ -81,5 +84,6 @@ test-suite blackjack-test
     , cereal
     , containers
     , hmatrix
+    , mtl
     , transformers
   default-language: Haskell2010

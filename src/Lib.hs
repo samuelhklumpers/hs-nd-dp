@@ -33,13 +33,13 @@ DP is more than memoization, we want the table back.
 -- 264600
 -- a linear solve will not agree
 
-data Hand = Hand { normals :: Int , ace :: Bool } deriving (Eq, Ord, Show, Generic)
 data Action = NA | Bet Bool | Hit | Stand | Bribe deriving (Eq, Ord, Show, Generic)
-data Blackjack = Blackjack
-    { you :: Hand, dealer :: Hand, stand :: Bool , bribeM_ :: Int
-    , bribe :: Int , multiplier_ :: Int , bet :: Bool } deriving (Eq, Ord, Show, Generic)
 data Stats = Stats { action :: Action , expectation :: Double } deriving (Eq, Ord, Show, Generic)
 data Status = Play | Win | Lose | Draw deriving (Eq, Ord, Show)
+data Hand = Hand { normals :: Int , ace :: Bool } deriving (Eq, Ord, Show, Generic)
+data Blackjack = Blackjack
+    { you :: Hand, dealer :: Hand, stand :: Bool , bribeM_ :: Int
+    , bribe :: Int , multiplier_ :: Int , bet :: Double } deriving (Eq, Ord, Show, Generic)
 
 deriving instance Serialize Hand
 deriving instance Serialize Blackjack
@@ -49,7 +49,7 @@ deriving instance Serialize Stats
 type DP = M.Map Blackjack Stats
 
 blackjack0 :: Blackjack
-blackjack0 = Blackjack (Hand 0 False) (Hand 0 False) False 0 0 0 True
+blackjack0 = Blackjack (Hand 0 False) (Hand 0 False) False 0 0 0 1
 
 -- use Control.Monad.Memo
 
@@ -66,6 +66,14 @@ memoOld f b = do
 ldist :: Functor f => (f a, t) -> f (a, t)
 ldist (m, x) = (, x) <$> m
 
+multiplier :: Blackjack -> Double
+multiplier = (2+) . (*0.1) . fromIntegral . multiplier_
+
+bribeM :: Blackjack -> Double
+bribeM = (0.75 ^) . bribeM_
+
+
+{-
 dp' :: Blackjack -> State DP Stats
 dp' b = let dpM = memoOld dp' in do
     -- we cut off the table at 5.1 thank you
@@ -134,12 +142,6 @@ dp' b = let dpM = memoOld dp' in do
 
                     return $ head s
 
-multiplier :: Blackjack -> Double
-multiplier = (2+) . (*0.1) . fromIntegral . multiplier_
-
-bribeM :: Blackjack -> Double
-bribeM = (0.75 ^) . bribeM_
-
 dp :: DP
 dp = execState (memoOld dp' blackjack0) mempty
 -- this doesn't understand stability, I think
@@ -175,6 +177,7 @@ crude = fmap (fmap go) dpf'
 
 cf :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
 cf = fromRight (error "bad read: cf") . decode <$> BS.readFile "holocure_blackjack_crude_expect.bin"
+-}
 
 -- TODO have fun chiseling at cf
 
@@ -199,9 +202,6 @@ cf = fromRight (error "bad read: cf") . decode <$> BS.readFile "holocure_blackja
 -- TODO remove bet :: Bool because it is constantly True
 
 -- nub $ concat $ catMaybes $ [cf' M.!? (Hand x False, Hand y False, 0, 0) | x <- [1..11], y <- [0..21]]
-
-graph :: M.Map k a -> M.Map k (k, a)
-graph = M.mapWithKey (,)
 
 instance Semigroup Hand where
     (Hand x y) <> (Hand z w)

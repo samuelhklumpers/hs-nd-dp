@@ -1,0 +1,124 @@
+module Jumpking (module Jumpking) where
+
+import qualified Data.Map.Lazy as M
+import Probability (Mean, MinMean)
+import DP (execDP, DPProblem (DPProblem))
+import Data.List (sortOn)
+
+-- | Represents where we are and how many checkpoints are below us.
+data JumpS = JumpS {
+    jump :: Int,
+    -- | There are `checkpoints` checkpoints below this jump.
+    checkpoints :: Int } deriving (Eq, Ord, Show)
+
+type JumpG = [(Double, Int)]
+data JumpA = Jump | Checkpoint deriving (Eq, Ord, Show)
+
+jumpkingPretty :: JumpG -> Int -> IO ()
+jumpkingPretty j n = putStrLn $ unlines (show <$> M.toList (jumpking j n))
+
+jumpking :: JumpG -> Int -> M.Map JumpS ((MinMean (Mean Double), MinMean (Mean Double)), Maybe JumpA)
+jumpking j n = execDP (jumpkingP j) (JumpS (length j) n)
+
+jumpkingP :: (Monad m, Fractional v) => JumpG -> DPProblem JumpS (v, v) JumpA m
+jumpkingP j = DPProblem (jumpkingAct j) (jumpkingVal j) (const $ return ())
+
+
+{-
+Let us consider jumpking without checkpoints.
+
+p(i): you make the jump from i to i+1.
+q(i) = 1 - p(i): you fall from i to i-f.
+S(i): expected jumps to get from 0 to i.
+
+Remark, S(i) - S(j): expected jumps to get from j to i.
+Write this as S(i;j)
+
+S(0)   = 0
+S(i+1) = S(i) + x
+x = p(i) + q(i)(1 + x + S(i;i - f))
+x = (1 + q(i)S(i;i-f))/p(i)
+
+With checkpoints:
+
+S(0,n)   = 0
+S(i+1,n) = min(V(i, n), S(i,n-1) + 1 / p(i))
+
+V(i,n) = S(i,n) + (1 + q(i)(S(i,n) - S(i-f,?)))/p(i)
+you want to minimize V(i,n) now.
+
+maybe just approximate this with pessimism and set ? = n
+
+V(i,n) = min_c(S^c(i,n) + (1 + q(i)(S^c(i,n) - S^c(i-f,n)))/p(i))
+S^y(i,n) = S(i-1,n-1) + 1 / p(i-1)
+S^n(i,n) = V(i-1,n)
+
+by approximating (?), minimizing S(i,n) automatically minimizes V(i,n)
+
+? can DP just change its mind on what statistic it's maximizing on the fly?
+-}
+
+-- in this formulation, jumpking does not have optimal substructure.
+
+jumpkingVal :: (Monad m, Fractional v) => JumpG -> JumpS -> (JumpS -> m (v, v)) -> JumpA -> m (v, v)
+jumpkingVal j (JumpS i n) v Jump = do
+    -- S(i,n) is the number of jumps to get from 0 to i with n checkpoints.
+    -- J(i,n) is the number of jumps to get from the last checkpoint to i
+
+    -- S^j(i+1,n) = S(i,n) + (1 + q(i)(J(i,n) - J(i-f,?)))/p(i)
+    -- J^j(i+1,n) = J(i,n) + (1 + q(i)(J(i,n) - J(i-f,?)))/p(i)
+    let (p', f) = j !! (i - 1)
+    let p = realToFrac p'
+    let q = 1 - p
+    (si1, ji1) <- v (JumpS (i - 1) n)
+-- something like "complete induction" to retrieve what n actually is at i - f - 1 in the optimal solution for i - 1 would be nice.
+    (_, ji1f) <- v (JumpS (i - f - 1) n)
+    let sji = si1 + (1 + q * (ji1 - ji1f)) / p
+    let jji = ji1 + (1 + q * (ji1 - ji1f)) / p
+
+    return (sji, jji)
+jumpkingVal j (JumpS i n) v Checkpoint = do
+    -- S^j(i+1,n) = S(i,n) + (1 + q(i)(J(i,n) - J(i-f,?)))/p(i)
+    -- J^j(i+1,n) = 0
+    let (p', f) = j !! (i - 1)
+    let p = realToFrac p'
+    let q = 1 - p
+    (si1, ji1) <- v (JumpS (i - 1) (n - 1))
+-- or maybe something clever to track some value like ji1 - ji1f on the fly?
+-- this value is wrong anyway because ji1 and ji1f don't need to belong to the same checkpoint
+    (_, ji1f) <- v (JumpS (i - f - 1) (n - 1))
+    let sji = si1 + (1 + q * (ji1 - ji1f)) / p
+
+    return (sji, 0)
+
+jumpkingAct :: Fractional v => JumpG -> JumpS -> Either (v, v) [JumpA]
+jumpkingAct _ (JumpS i n)
+  | i > 0     = Right $ Jump : [Checkpoint | n > 0]
+  | otherwise = Left (0, 0)
+
+select :: Int -> Int -> [[Bool]]
+select n m
+  | n > 0     = if m > 0 then
+      ((True:) <$> select (n - 1) (m - 1)) ++ ((False:) <$> select (n - 1) m)
+    else
+      [replicate n False]
+  | otherwise = [[]]
+
+jumpkingBF :: JumpG -> Int -> ([Double], [Bool])
+jumpkingBF j n = head $ sortOn (head . fst) $ (\cs -> (go j cs, cs)) <$> select (length j) n
+    where
+    fall (r:_) _ 0 = r
+    fall (r:r') (c:cs) f 
+      | c         = r
+      | otherwise = fall r' cs (f - 1)
+    fall r cs f = error $ "a:" ++ unlines [show r, show cs, show f]
+
+    go [] [] = [0]
+    go ((p, f):js) cs = head r + (1 + q * (head r - fall r cs f)) / p : r
+      where
+      r = go js (tail cs)
+      q = 1 - p
+    go _ _ = error "b"
+
+jumpkingBF' :: [(Double, Int)] -> Int -> IO ()
+jumpkingBF' j n = putStrLn $ unlines $ fmap show $ zip j $ uncurry zip $ jumpkingBF j n

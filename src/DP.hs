@@ -1,15 +1,18 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module DP
     ( module DP ) where
 
 import qualified Data.Map as M
 import Data.List ( sortOn, maximumBy )
 import Data.Bifunctor (bimap)
-import Control.Monad.Memo (memo, MonadMemo, startRunMemo)
+import Control.Monad.Memo (memo, MonadMemo, startRunMemo, Memo)
 import Data.Foldable (fold)
 import Data.Function (on)
+import Control.Monad ((>=>))
 
 
 {-
@@ -52,18 +55,22 @@ data DPProblem s v a m =
         actValue :: s -> (s -> m v) -> a -> m v,
         -- | When `m` is a stack including writing, this can be used to log intermediate solutions
         -- | or compute a more useful representation of the optimal solutions on the fly.
-        optTrace :: (v, s, Maybe a) -> m ()
+        dpTrace :: (v, s, Either (Maybe a) (a, s)) -> m (v, Maybe a)
     }
 
 solveDP :: (Ord v, MonadMemo s (v, Maybe a) m)
       => DPProblem s v a m -> s -> m (v, Maybe a)
 solveDP p = memo $ \ s -> do
     case endOrAct p s of
-        Left v   -> optTrace p (v, s, Nothing) >> return (v, Nothing)
+        Left v   -> dpTrace p (v, s, Left Nothing) >> return (v, Nothing)
         Right as -> do
             let subnodes = val' <$> as
             (v', a) <- maximumBy (compare `on` fst) <$> sequence subnodes
-            optTrace p (v', s, Just a)
-            return (v', Just a)
+            dpTrace p (v', s, Left $ Just a)
+            --return (v', Just a)
             where
-            val' a = (, a) <$> actValue p s (fmap fst . solveDP p) a
+            val' a = (, a) <$> actValue p s (\ s' -> solveDP p s' >>= dpTrace' a s') a
+            dpTrace' a s' (v, _) = fst <$> dpTrace p (v, s, Right (a, s'))
+
+execDP :: (Ord v, Ord s) => DPProblem s v a (Memo s (v, Maybe a)) -> s -> M.Map s (v, Maybe a)
+execDP p s = snd $ startRunMemo (solveDP p s)
