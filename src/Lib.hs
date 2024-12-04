@@ -9,15 +9,9 @@ module Lib
 
 import qualified Data.Map as M
 import Control.Monad.Trans.State.Lazy
-    ( execState, get, modify, State )
-import Control.Monad ( forM )
-import Data.List ( sortOn, groupBy )
-import Data.Serialize ( Serialize, encode, decode )
+    ( get, modify, State )
+import Data.Serialize ( Serialize )
 import GHC.Generics ( Generic )
-import qualified Data.ByteString as BS
-import Data.Either ( fromRight )
-import Data.Function (on)
-import Data.Bifunctor (first)
 
 {-
 The python is bad but has the right idea.

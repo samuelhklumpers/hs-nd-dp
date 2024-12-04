@@ -29,6 +29,7 @@ dependencies:
 - bytestring
 
 ghc-options:
+- -O2
 - -Wall
 - -Wcompat
 - -Widentities
@@ -42,6 +43,8 @@ ghc-options:
 library:
   source-dirs: src
   dependencies:
+  - hashable
+  - unordered-containers
   - monad-memo
 
 executables:

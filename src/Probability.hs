@@ -1,11 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE TupleSections #-}
-{-# OPTIONS -Wno-type-defaults #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FunctionalDependencies,
+FlexibleInstances, UndecidableInstances, TupleSections, DeriveFunctor #-}
 
 module Probability ( module Probability ) where
 import Data.Function (on)
@@ -22,7 +16,7 @@ class Mixture a where
 avg :: Mixture a => [a] -> a
 avg = weightedAvg . fmap (1,)
 
-newtype Mean a = Mean { getMean :: a } deriving (Show, Num, Fractional, Floating)
+newtype Mean a = Mean { getMean :: a } deriving (Show, Num, Fractional, Floating, Eq, Ord)
 
 class HasMean a r | a -> r where
     mean :: a -> r
@@ -35,7 +29,7 @@ instance Fractional a => Mixture (Mean a) where
     where
     w = realToFrac $ sum $ fmap fst xs
 
-newtype LogP1 a = LogP1 { getLogP1 :: a } deriving (Show, Functor)
+newtype LogP1 a = LogP1 { getLogP1 :: a } deriving (Show, Functor, Bounded)
 
 instance Applicative LogP1 where
   pure = LogP1
@@ -93,7 +87,7 @@ instance (HasMean a r) => HasMean (MinMean a) r where
 instance Mixture a => Mixture (MinMean a) where
   weightedAvg = MinMean . weightedAvg . fmap (second getMinMean)
 
-data Variance a b = Variance { unVariance :: a , getVariance :: b } deriving Show
+data Variance a b = Variance { unVariance :: a , getVariance :: b } deriving (Show)
 
 class HasVariance a r | a -> r where
     variance :: a -> r
@@ -106,7 +100,7 @@ instance HasVariance (Variance a b) b where
 
 instance (HasMean a b, Num a, Num b) => Num (Variance a b) where
     Variance mx vx + Variance my vy = Variance (mx + my) (vx + vy)
-    Variance mx vx * Variance my vy = Variance (mx * my) (vx * vy + vx * mean mx ^ 2 + vy * mean my ^ 2)
+    Variance mx vx * Variance my vy = Variance (mx * my) (vx * vy + vx * mean mx ^ (2 :: Int) + vy * mean my ^ (2 :: Int))
     abs = error "cannot take abs of Variance"
     signum = error "cannot take signum of Variance"
     fromInteger x = Variance (fromInteger x) 0
@@ -121,6 +115,6 @@ instance (Fractional b, HasMean a b, Mixture a) => Mixture (Variance a b) where
   weightedAvg xs = Variance mx vx
     where
     mx = weightedAvg $ fmap (second unVariance) xs
-    vx = - (mean mx ^ 2)
-         + sum [realToFrac wi * (variance xi + mean xi ^ 2) | (wi, xi) <- xs] / w
+    vx = - (mean mx ^ (2 :: Int))
+         + sum [realToFrac wi * (variance xi + mean xi ^ (2 :: Int)) | (wi, xi) <- xs] / w
     w  = realToFrac $ sum $ fmap fst xs
