@@ -99,9 +99,13 @@ instance Monoid Hand where
 
 
 -- * Problem statement
-blackjackP :: (Monad m, Fractional s, Mixture s, Ord s) => [Double] -> DPProblem Blackjack s Action m
-blackjackP bets = DPProblem (enumSearch $ blackjackAct bets) blackjackVal $ \ (s, _, ea) -> do
+blackjackP :: (Monad m, Fractional s, Mixture s, Ord s) => DPProblem Blackjack s Action m
+blackjackP = DPProblem srch blackjackVal $ \ (s, _, ea) -> do
     return (s, fromLeft Nothing ea)
+    where
+    srch b 
+      | valueHand (you b) == 0 = uniSearch 1 Bet 0 1 b
+      | otherwise = enumSearch blackjackAct b
 
 valueHand :: Hand -> Int
 valueHand (Hand n a)
@@ -109,10 +113,9 @@ valueHand (Hand n a)
     | a = n + 1
     | otherwise = n
 
-blackjackAct :: Fractional s => [Double] -> Blackjack -> Either s [Action]
-blackjackAct bets b
-  | multiplier_ b > 30 = Left 0
-  | y == 0  = Right $ Bet <$> bets
+blackjackAct :: Fractional s => Blackjack -> Either s [Action]
+blackjackAct b
+  | multiplier_ b > 0 = Left 0
   | y > 21  = lose
   | d > 21  = win
   | d == 21 = if y == 21 then draw' else lose
@@ -209,12 +212,15 @@ compactKellyEnumStored = fromRight (error "bad read: compactKellyEnumStored") . 
 kellyEnumStored :: IO (M.Map Blackjack (Double, Maybe Action))
 kellyEnumStored = M.fromList . fromRight (error "bad read: kellyEnumStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly.bin"
 
+kellyUniStored :: IO (M.Map Blackjack (Double, Maybe Action))
+kellyUniStored = M.fromList . fromRight (error "bad read: kellyUniStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly_uni.bin"
+
 computeAndStore :: IO ()
 computeAndStore = do
-    table <- blackjackTableRed [0.025, 0.05, 0.15, 0.25, 0.4, 0.8] :: (IO (HM.HashMap Blackjack (MaxMean (LogP1 (Mean Double)), Maybe Action)))
+    table <- blackjackTableRed :: (IO (HM.HashMap Blackjack (MaxMean (LogP1 (Mean Double)), Maybe Action)))
     print $ length table
     --let compTable = compact $ summary $ M.fromList $ HM.toList table
-    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly.bin" $ encode $ HM.toList $ first mean <$> table
+    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly_uni.bin" $ encode $ HM.toList $ first mean <$> table
     return ()
 
 compact :: HasMean v Double => M.Map (Hand, Hand, Int, Int) [(Blackjack, (v, Action))] -> M.Map (Hand, Hand, Int, Int) [(Int, Action)]
@@ -237,10 +243,10 @@ summary table = M.mapKeysWith (++) (\ b -> (you b , dealer b , bribe b , bribeM_
     check (b, (s, Just a))  =
         [(b, (s, a)) | multiplier_ b < 20 && (a `elem` [Hit,Stand,Bribe] && lookup (multiplier_ b) v == Just (bet b) || isBet a)]
 
-blackjackTableRed :: (Ord s, Fractional s, Mixture s) => [Double] -> IO (HM.HashMap Blackjack (s, Maybe Action))
-blackjackTableRed bets = do
-    !t <- blackjackTable bets
-    execDP (reducedP t (blackjackP bets)) blackjack0
+blackjackTableRed :: (Ord s, Fractional s, Mixture s) => IO (HM.HashMap Blackjack (s, Maybe Action))
+blackjackTableRed = do
+    !t <- blackjackTable
+    execDP (reducedP t blackjackP) blackjack0
 
-blackjackTable :: (Ord s, Fractional s, Mixture s) => [Double] -> IO (HM.HashMap Blackjack (s, Maybe Action))
-blackjackTable bets = execDP (blackjackP bets) blackjack0
+blackjackTable :: (Ord s, Fractional s, Mixture s) => IO (HM.HashMap Blackjack (s, Maybe Action))
+blackjackTable = execDP blackjackP blackjack0
