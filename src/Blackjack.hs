@@ -1,6 +1,7 @@
 {-# LANGUAGE StandaloneDeriving, DeriveGeneric, DeriveAnyClass, TupleSections,
 ScopedTypeVariables, TypeApplications, FlexibleContexts, FlexibleInstances,
 MultiParamTypeClasses, UndecidableInstances #-}
+{-# LANGUAGE BangPatterns #-}
 
 {-|
 This module defines a variant of Blackjack and formulates the optimal strategy as a dynamic programming problem.
@@ -61,6 +62,14 @@ instance Hashable Hand
 instance Hashable Action
 instance Hashable Blackjack
 
+unBet :: Action -> Double
+unBet (Bet x) = x
+unBet _ = error "unBet: x != Bet y"
+
+isBet :: Action -> Bool
+isBet (Bet _) = True
+isBet _ = False
+
 draw :: [Hand]
 draw = Hand 0 True : (normalHand <$> ([2..10] ++ [10, 10, 10, 10]))
 
@@ -90,8 +99,8 @@ instance Monoid Hand where
 
 
 -- * Problem statement
-blackjackP :: (Monad m, Fractional s, Mixture s, Ord s) => s -> [Double] -> DPProblem Blackjack s Action m
-blackjackP v0 bets = DPProblem (enumSearch v0 $ blackjackAct bets) blackjackVal $ \ (s, _, ea) -> do
+blackjackP :: (Monad m, Fractional s, Mixture s, Ord s) => [Double] -> DPProblem Blackjack s Action m
+blackjackP bets = DPProblem (enumSearch $ blackjackAct bets) blackjackVal $ \ (s, _, ea) -> do
     return (s, fromLeft Nothing ea)
 
 valueHand :: Hand -> Int
@@ -102,7 +111,7 @@ valueHand (Hand n a)
 
 blackjackAct :: Fractional s => [Double] -> Blackjack -> Either s [Action]
 blackjackAct bets b
-  | multiplier_ b > 10 = Left 0
+  | multiplier_ b > 30 = Left 0
   | y == 0  = Right $ Bet <$> bets
   | y > 21  = lose
   | d > 21  = win
@@ -161,8 +170,17 @@ blackjackVal b v Bribe  = do
 
 
 -- * Processing
-dumpCSV :: IO ()
-dumpCSV = do
+fmtHand :: Hand -> String
+fmtHand (Hand n a) = show n ++ (if a then "A" else "")
+
+fmtAdvice :: (Int, Action) -> String
+fmtAdvice (n, a) = show n ++ [head $ show a]
+
+graph :: M.Map k a -> M.Map k (k, a)
+graph = M.mapWithKey (,)
+
+dumpCSV :: M.Map (Hand, Hand, Int, Int) [(Int, Action)] -> IO ()
+dumpCSV table = do
     sheets' <- sheets
     forM_ sheets' $ \ (i, j, sheet) -> do
         BS.writeFile ("tables_test/" ++ show i ++ show j ++ "kelly.csv") $ fromString sheet
@@ -172,8 +190,7 @@ dumpCSV = do
     sheets = sequence [sheet i j | j <- [0..3], i <- [0..j]]
         where
         sheet i j = do
-            kTableR' <- kTableR
-            let t1 = M.filterWithKey (\ (h, _, i', j') _ -> i == i' && j == j' && h /= Hand 0 False) kTableR'
+            let t1 = M.filterWithKey (\ (h, _, i', j') _ -> i == i' && j == j' && h /= Hand 0 False) table
             let t2 = M.toList $ concatMap fmtAdvice <$> M.mapKeys (\ (x, y, _, _) -> (x, y)) t1
             let hands' = [Hand x False | x <- [4..20]] ++ [Hand x True | x <- [1..20]]
             let hands = fmtHand <$> hands'
@@ -185,138 +202,45 @@ dumpCSV = do
 
             return (i, j, unlines $ intercalate "," <$> body)
 
-fmtHand :: Hand -> String
-fmtHand (Hand n a) = show n ++ (if a then "A" else "")
+-- some stored tables
+compactKellyEnumStored :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
+compactKellyEnumStored = fromRight (error "bad read: compactKellyEnumStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly_red.bin"
 
-fmtAdvice :: (Int, Action) -> String
-fmtAdvice (n, a) = show n ++ [head $ show a]
-
-eTable :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
-eTable = fromRight (error "bad read: eTable") . decode <$> BS.readFile "tables/holocure_blackjack_crude_expect_2.bin"
-
-kTable :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
-kTable = fromRight (error "bad read: kTable") . decode <$> BS.readFile "tables/holocure_blackjack_crude_kelly_2.bin"
-
-kTableRaw :: M.Map (Hand, Hand, Int, Int) [(Int, Action)]
-kTableRaw = blackjackTableCompact (Proxy @(MaxMean (LogP1 (Mean Double)))) (-0.9) [0.025, 0.05, 0.15, 0.25, 0.4, 0.8]
-
-kTableRawIO :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
-kTableRawIO = blackjackTableCompactIO (Proxy @(MaxMean (LogP1 (Mean Double)))) (-0.9) [0.025, 0.05, 0.15, 0.25, 0.4, 0.8]
-
-blackjackExpect :: M.Map Blackjack (MaxMean (Mean Double), Maybe Action)
-blackjackExpect = blackjackTable (-10) [1]
-
-blackjackKelly :: M.Map Blackjack (MaxMean (LogP1 (Mean Double)), Maybe Action)
-blackjackKelly = blackjackTableRed (-0.9) [0.05, 0.1, 0.15, 0.2]
-
-blackjackVariance :: M.Map Blackjack (MaxMean (Variance (Mean Double) Double), Maybe Action)
-blackjackVariance = blackjackTable (-10) [1]
-
-blackjackPGraph :: (Fractional s, Mixture s, Ord s, MonadState (M.Map (Blackjack, Action) [Blackjack]) m)
-                => [Double] -> DPProblem Blackjack s Action m
-blackjackPGraph bets = DPProblem (enumSearch (-0.9) $ blackjackAct bets) blackjackVal $ \ (s, b, ea) -> do
-    _ <- case ea of
-        Left  _ -> return ()
-        Right (a, b') -> do
-            modify (M.insertWith (++) (b, a) [b'])
-
-    return (s, fromLeft Nothing ea)
-
-kTableR :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
-kTableR = fromRight (error "bad read: kTable") . decode <$> BS.readFile "tables/holocure_blackjack_kelly_red.bin"
+kellyEnumStored :: IO (M.Map Blackjack (Double, Maybe Action))
+kellyEnumStored = M.fromList . fromRight (error "bad read: kellyEnumStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly.bin"
 
 computeAndStore :: IO ()
 computeAndStore = do
-    --_ <- BS.writeFile "tables/holocure_blackjack_crude_expect_2.bin" $ encode (blackjackTableCompact (Proxy @(MaxMean (Mean Double))) [1])
-    --_ <- BS.writeFile "tables/holocure_blackjack_crude_kelly_2.bin" $ encode (blackjackTableCompact (Proxy @(MaxMean (LogP1 (Mean Double)))) [0.025, 0.05, 0.15, 0.25, 0.4, 0.8])
-    table <- blackjackTableRedIO (-0.9) [0.025, 0.05, 0.15, 0.25, 0.4, 0.8] :: (IO (HM.HashMap Blackjack (MaxMean (LogP1 (Mean Double)), Maybe Action)))
+    table <- blackjackTableRed [0.025, 0.05, 0.15, 0.25, 0.4, 0.8] :: (IO (HM.HashMap Blackjack (MaxMean (LogP1 (Mean Double)), Maybe Action)))
     print $ length table
-    --_ <- BS.writeFile "tables/holocure_blackjack_kelly_red.bin" $ encode table
+    --let compTable = compact $ summary $ M.fromList $ HM.toList table
+    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly.bin" $ encode $ HM.toList $ first mean <$> table
     return ()
 
-blackjackTableCompact :: (HasMean v Double, Ord v, Fractional v, Mixture v) => Proxy v -> v -> [Double] -> M.Map (Hand, Hand, Int, Int) [(Int, Action)]
-blackjackTableCompact (Proxy :: Proxy v) v0 bets = M.filter (not . null) $ fmap (go . fmap (second (first (mean :: v -> Double)))) (blackjackTable' v0 bets)
+compact :: HasMean v Double => M.Map (Hand, Hand, Int, Int) [(Blackjack, (v, Action))] -> M.Map (Hand, Hand, Int, Int) [(Int, Action)]
+compact table = M.filter (not . null) $ fmap (groupRuns . fmap (second (first mean))) table
     where
-    go :: [(Blackjack, (Double, Action))] -> [(Int, Action)]
-    go = fmap pick . groupBy ((==) `on` snd . snd) . sortOn fst . fmap (first multiplier_)
+    groupRuns :: [(Blackjack, (Double, Action))] -> [(Int, Action)]
+    groupRuns = fmap pick . groupBy ((==) `on` snd . snd) . sortOn fst . fmap (first multiplier_)
 
     pick :: [(Int, (Double, Action))] -> (Int, Action)
     pick xs@(x : _) = (minimum (fst <$> xs), snd $ snd x)
     pick [] = error "crude:pick: This is bad."
 
-blackjackTableCompactIO :: (HasMean v Double, Ord v, Fractional v, Mixture v) => Proxy v -> v -> [Double] -> IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
-blackjackTableCompactIO (Proxy :: Proxy v) v0 bets = M.filter (not . null) . fmap (go . fmap (second (first (mean :: v -> Double)))) <$> blackjackTable'IO v0 bets
+summary :: M.Map Blackjack (s, Maybe Action) -> M.Map (Hand, Hand, Int, Int) [(Blackjack, (s, Action))]
+summary table = M.mapKeysWith (++) (\ b -> (you b , dealer b , bribe b , bribeM_ b)) . fmap check . graph $ table
     where
-    go :: [(Blackjack, (Double, Action))] -> [(Int, Action)]
-    go = fmap pick . groupBy ((==) `on` snd . snd) . sortOn fst . fmap (first multiplier_)
+    v = (\ m -> (m,) $ unBet $ fromJust $ snd $ table M.! blackjack0 { multiplier_ = m } ) <$> [0..19]
 
-    pick :: [(Int, (Double, Action))] -> (Int, Action)
-    pick xs@(x : _) = (minimum (fst <$> xs), snd $ snd x)
-    pick [] = error "crude:pick: This is bad."
-
-graph :: M.Map k a -> M.Map k (k, a)
-graph = M.mapWithKey (,)
-
-blackjackTable' :: (Ord s, Fractional s, Mixture s) => s -> [Double] -> M.Map (Hand, Hand, Int, Int) [(Blackjack, (s, Action))]
-blackjackTable' v0 bets = (M.mapKeysWith (++) (\ b -> (you b , dealer b , bribe b , bribeM_ b)) . fmap go . graph) t
-    where
-    t = blackjackTableRed v0 bets
-    v = (\ m -> (m,) $ unBet $ fromJust $ snd $ t M.! blackjack0 { multiplier_ = m } ) <$> [0..19]
-
-    go :: (Blackjack, (s, Maybe Action)) -> [(Blackjack, (s, Action))]
-    go (_, (_, Nothing)) = []
-    go (b, (s, Just a))  =
+    check :: (Blackjack, (s, Maybe Action)) -> [(Blackjack, (s, Action))]
+    check (_, (_, Nothing)) = []
+    check (b, (s, Just a))  =
         [(b, (s, a)) | multiplier_ b < 20 && (a `elem` [Hit,Stand,Bribe] && lookup (multiplier_ b) v == Just (bet b) || isBet a)]
 
-blackjackTable'IO :: (Ord s, Fractional s, Mixture s) => s -> [Double] -> IO (M.Map (Hand, Hand, Int, Int) [(Blackjack, (s, Action))])
-blackjackTable'IO v0 bets = do
-    t' <- blackjackTableRedIO v0 bets
-    let t = M.fromList $ HM.toList t'
-    let v = (\ m -> (m,) $ unBet $ fromJust $ snd $ t M.! blackjack0 { multiplier_ = m } ) <$> [0..19]
-    return $ (M.mapKeysWith (++) (\ b -> (you b , dealer b , bribe b , bribeM_ b)) . fmap (go v) . graph) t
-    where
+blackjackTableRed :: (Ord s, Fractional s, Mixture s) => [Double] -> IO (HM.HashMap Blackjack (s, Maybe Action))
+blackjackTableRed bets = do
+    !t <- blackjackTable bets
+    execDP (reducedP t (blackjackP bets)) blackjack0
 
-    go :: [(Int, Double)] -> (Blackjack, (s, Maybe Action)) -> [(Blackjack, (s, Action))]
-    go _ (_, (_, Nothing)) = []
-    go v (b, (s, Just a))  =
-        [(b, (s, a)) | multiplier_ b < 20 && (a `elem` [Hit,Stand,Bribe] && lookup (multiplier_ b) v == Just (bet b) || isBet a)]
-
-blackjackTableRedIO :: (Ord s, Fractional s, Mixture s) => s -> [Double] -> IO (HM.HashMap Blackjack (s, Maybe Action))
-blackjackTableRedIO v0 bets = do
-    t <- blackjackTableIO v0 bets
-    execDP' (reducedP' t v0 (blackjackP v0 bets)) blackjack0
-
-blackjackTableIO :: (Ord s, Fractional s, Mixture s) => s -> [Double] -> IO (HM.HashMap Blackjack (s, Maybe Action))
-blackjackTableIO v0 bets = execDP' (blackjackP v0 bets) blackjack0
-
-unBet :: Action -> Double
-unBet (Bet x) = x
-unBet _ = error "unBet: x != Bet y"
-
-isBet :: Action -> Bool
-isBet (Bet _) = True
-isBet _ = False
-
-blackjackTableRed :: (Ord s, Fractional s, Mixture s) => s -> [Double] -> M.Map Blackjack (s, Maybe Action)
-blackjackTableRed v0 bets = execDP (reducedP (blackjackTable v0 bets) v0 (blackjackP v0 bets)) blackjack0
-
-blackjackTable :: (Ord s, Fractional s, Mixture s) => s -> [Double] -> M.Map Blackjack (s, Maybe Action)
-blackjackTable v0 bets = execDP (blackjackP v0 bets) blackjack0
-
-{-
-instance MonadState s m => MonadState s (MemoT k v m) where
-  state f = lift (state f)
-
-blackjackTableRed :: (Ord s, Fractional s, Mixture s) => [Double] -> M.Map Blackjack (s, Maybe Action')
-blackjackTableRed bets = reach blackjack0 mempty
-    where
-    ((_, table), grph :: M.Map (Blackjack, Action') [Blackjack]) = flip runState mempty $ startRunMemoT $ solveDP (blackjackPGraph bets) blackjack0
-    reach b tableRed = case tableRed M.!? b of
-        Just _ -> tableRed -- already seen, skip
-        Nothing -> case table M.!? b of
-            Nothing -> error "blackjackTableRed: impossible: graph contains unreached state"
-            Just (_, Nothing) -> tableRed -- terminal state, ignore
-            Just x@(_, Just a) -> case grph M.!? (b, a) of
-                Nothing -> error "blackjackTableRed: impossible: table contains unreached state"
-                Just sub -> M.insert b x $ flip appEndo tableRed $ foldMap (Endo . reach) sub
--}
+blackjackTable :: (Ord s, Fractional s, Mixture s) => [Double] -> IO (HM.HashMap Blackjack (s, Maybe Action))
+blackjackTable bets = execDP (blackjackP bets) blackjack0
