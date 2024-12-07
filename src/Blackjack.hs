@@ -14,7 +14,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict as M
 import Data.Traversable (forM)
 import Data.List (groupBy, sortOn, intercalate)
-import Data.Function (on)
+import Data.Function (on, (&))
 import Data.Bifunctor (first, second)
 import Data.Serialize (encode, Serialize, decode)
 import qualified Data.ByteString as BS
@@ -28,6 +28,8 @@ import GHC.Exts (fromString)
 import Control.Monad (forM_)
 
 import DP
+import Data.Bits (shiftL, (.|.), xor)
+import GHC.Float (castDoubleToWord64)
 
 
 -- * Definition
@@ -60,7 +62,19 @@ data Action = Bet !Double | Draw | Win | Lose | Dealer | Hit | Stand | Bribe der
 
 instance Hashable Hand
 instance Hashable Action
-instance Hashable Blackjack
+--instance Hashable Blackjack
+
+instance Hashable Blackjack where
+    hash (Blackjack (Hand y ya) (Hand d da) s b_ b m b') = 
+        (    y
+        .|. fromEnum ya `shiftL` 5
+        .|.           d `shiftL` 6
+        .|. fromEnum da `shiftL` 11
+        .|.  fromEnum s `shiftL` 12
+        .|.          b_ `shiftL` 13
+        .|.           b `shiftL` 15
+        .|.           m `shiftL` 17)
+        `xor` fromIntegral (castDoubleToWord64 b')
 
 unBet :: Action -> Double
 unBet (Bet x) = x
@@ -182,6 +196,9 @@ fmtAdvice (n, a) = show n ++ [head $ show a]
 graph :: M.Map k a -> M.Map k (k, a)
 graph = M.mapWithKey (,)
 
+dumpCSV' :: IO ()
+dumpCSV' = kellyUniCompactStored >>= dumpCSV 
+
 dumpCSV :: M.Map (Hand, Hand, Int, Int) [(Int, Action)] -> IO ()
 dumpCSV table = do
     sheets' <- sheets
@@ -215,12 +232,16 @@ kellyEnumStored = M.fromList . fromRight (error "bad read: kellyEnumStored") . d
 kellyUniStored :: IO (M.Map Blackjack (Double, Maybe Action))
 kellyUniStored = M.fromList . fromRight (error "bad read: kellyUniStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly_uni.bin"
 
+kellyUniCompactStored :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
+kellyUniCompactStored = M.fromList . fromRight (error "bad read: kellyUniCompactStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly_uni_compact.bin"
+
 computeAndStore :: IO ()
 computeAndStore = do
     table <- blackjackTableRed :: (IO (HM.HashMap Blackjack (MaxMean (LogP1 (Mean Double)), Maybe Action)))
     print $ length table
+    print $ table HM.!? blackjack0
     --let compTable = compact $ summary $ M.fromList $ HM.toList table
-    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly_uni.bin" $ encode $ HM.toList $ first mean <$> table
+    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly_uni.bin.bak" $ encode $ HM.toList $ first mean <$> table
     return ()
 
 compact :: HasMean v Double => M.Map (Hand, Hand, Int, Int) [(Blackjack, (v, Action))] -> M.Map (Hand, Hand, Int, Int) [(Int, Action)]

@@ -5,4 +5,5 @@ import Blackjack
 main :: IO ()
 --main = putStrLn $ unlines $ fmap show $ take 100 $ M.toList myTable
 --main = dumpCSV
-main = computeAndStore
+main = do
+    computeAndStore

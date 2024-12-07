@@ -1,6 +1,6 @@
 profile:
 	stack build --profile
-	stack exec --profile -- blackjack-exe +RTS -p -hT
+	stack exec --profile -- blackjack-exe +RTS -sstderr -p -hT
 #	stack exec --profile -- blackjack-exe +RTS -p -hy
 #	stack exec --profile -- blackjack-exe +RTS -p -hr
 #	stack exec --profile -- blackjack-exe +RTS -p -hr -hcenumSearch.next\'
@@ -12,6 +12,10 @@ time:
 	time stack exec -- blackjack-exe 2>> timing.txt
 	echo >> timing.txt
 	time stack exec -- blackjack-exe 2>> timing.txt
+
+time1:
+	stack build
+	time stack exec -- blackjack-exe 2> timing.txt
 
 displayflame: displayheap
 	cat blackjack-exe.prof | ghc-prof-flamegraph > blackjack-exe.prof.svg

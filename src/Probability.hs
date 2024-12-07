@@ -4,6 +4,7 @@ FlexibleInstances, UndecidableInstances, TupleSections, DeriveFunctor #-}
 module Probability ( module Probability ) where
 import Data.Function (on)
 import Data.Bifunctor (second)
+import Data.Foldable (foldl')
 
 -- * This entire module assumes _everything_ is _always_ **independent**.
 
@@ -25,6 +26,12 @@ instance HasMean (Mean a) a where
   mean = getMean
 
 instance Fractional a => Mixture (Mean a) where
+  {-
+  weightedAvg = Mean . uncurry (/) . foldl' go (0, 0)
+    where
+    go (s, w) (wi', Mean xi) = let wi = realToFrac wi' in
+        (wi * xi + s, wi + w)
+  -}
   weightedAvg xs = Mean $ sum [realToFrac wi * xi | (wi, Mean xi) <- xs] / w
     where
     w = realToFrac $ sum $ fmap fst xs
@@ -51,6 +58,13 @@ instance (HasMean a r, Floating r) => HasMean (LogP1 a) r where
   mean = exp . subtract 1 . mean . getLogP1
 
 instance Fractional a => Mixture (LogP1 a) where
+    -- the fold is slower because i'm bad
+    {-
+  weightedAvg = LogP1 . uncurry (/) . foldl' go (0, 0)
+    where
+    go (s, w) (wi', LogP1 xi) = let wi = realToFrac wi' in
+        (wi * xi + s, wi + w)
+    -}
     weightedAvg xs = LogP1 $ sum [realToFrac wi * xi | (wi, LogP1 xi) <- xs] / w
         where
         w = realToFrac $ sum $ fmap fst xs
@@ -87,7 +101,7 @@ instance (HasMean a r) => HasMean (MinMean a) r where
 instance Mixture a => Mixture (MinMean a) where
   weightedAvg = MinMean . weightedAvg . fmap (second getMinMean)
 
-data Variance a b = Variance { unVariance :: a , getVariance :: b } deriving (Show)
+data Variance a b = Variance { unVariance :: !a , getVariance :: !b } deriving (Show)
 
 class HasVariance a r | a -> r where
     variance :: a -> r

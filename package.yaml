@@ -44,6 +44,7 @@ library:
   source-dirs: src
   dependencies:
   - hashable
+  - memotrie
   - unordered-containers
   - monad-memo
 
