@@ -1,18 +1,17 @@
 name:                blackjack
 version:             0.1.0.0
-github:              "githubuser/blackjack"
+github:              "samuelhklumpers/hs-nd-dp"
 license:             BSD-3-Clause
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2024 Author name here"
+author:              "Samuel Klumpers"
+copyright:           "2024 Samuel Klumpers"
 
 extra-source-files:
 - README.md
 - CHANGELOG.md
 
 # Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
+# synopsis:            Non-deterministic dynamic programming solver
+# category:            dynamic programming
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
