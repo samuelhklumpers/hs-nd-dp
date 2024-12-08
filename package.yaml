@@ -27,6 +27,8 @@ dependencies:
 - mtl
 - cereal
 - bytestring
+- hashable
+- unordered-containers
 
 ghc-options:
 - -O2
@@ -42,11 +44,6 @@ ghc-options:
 
 library:
   source-dirs: src
-  dependencies:
-  - hashable
-  - memotrie
-  - unordered-containers
-  - monad-memo
 
 executables:
   blackjack-exe:

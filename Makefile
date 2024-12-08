@@ -5,6 +5,9 @@ profile:
 #	stack exec --profile -- blackjack-exe +RTS -p -hr
 #	stack exec --profile -- blackjack-exe +RTS -p -hr -hcenumSearch.next\'
 
+docs:
+	stack haddock --no-haddock-deps
+
 time:
 	stack build
 	time stack exec -- blackjack-exe 2> timing.txt

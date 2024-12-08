@@ -1,45 +1,39 @@
-{-# LANGUAGE StandaloneDeriving, DeriveGeneric, DeriveAnyClass, TupleSections,
-ScopedTypeVariables, TypeApplications, FlexibleContexts, FlexibleInstances,
-MultiParamTypeClasses, UndecidableInstances #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 
 {-|
-This module defines a variant of Blackjack and formulates the optimal strategy as a dynamic programming problem.
+This module defines a variant of Blackjack and formulates the optimal strategy as a `DPProblem`.
 -}
-module Blackjack ( module Blackjack ) where
+module Blackjack ( computeAndStore , dumpCSV' ) where
 
-
-import Data.Hashable
-import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
-import Data.Traversable (forM)
-import Data.List (groupBy, sortOn, intercalate)
-import Data.Function (on, (&))
-import Data.Bifunctor (first, second)
-import Data.Serialize (encode, Serialize, decode)
-import qualified Data.ByteString as BS
-import GHC.Generics (Generic)
-import Data.Either (fromRight, fromLeft)
-import Probability (Mean, MaxMean, Variance, weightedAvg, avg, Mixture, mean, LogP1, HasMean)
-import Data.Proxy (Proxy (..))
-import Data.Maybe (fromJust, mapMaybe, fromMaybe)
-import Control.Monad.State.Class (MonadState, modify)
-import GHC.Exts (fromString)
 import Control.Monad (forM_)
-
-import DP
+import Data.Bifunctor (first, second)
 import Data.Bits (shiftL, (.|.), xor)
+import qualified Data.ByteString as BS
+import Data.Either (fromRight)
+import Data.Function (on)
+import Data.Hashable ( Hashable(hash) )
+import qualified Data.HashMap.Strict as HM
+import Data.List (groupBy, sortOn, intercalate)
+import qualified Data.Map.Strict as M
+import Data.Maybe (fromJust, mapMaybe, fromMaybe)
+import Data.Serialize (encode, Serialize, decode)
+import Data.Traversable (forM)
+import GHC.Exts (fromString)
 import GHC.Float (castDoubleToWord64)
+import GHC.Generics (Generic)
 
+import DP (DPProblem(..), enumSearch, uniSearch, reducedDP)
+import Probability (Mean, MaxMean, weightedAvg, avg, Mixture, mean, Log1P, HasMean)
 
--- * Definition
-
-{-|
-The type of hands, holding cards with values summing up to `normals` with an optional additional `ace`.
-
-(This works, because a second ace always has a value of 1).
--}
-data Hand = Hand { normals :: !Int , ace :: !Bool } deriving (Eq, Ord, Show, Generic)
 {-| 
 The type of blackjack states.
 -}
@@ -56,16 +50,17 @@ data Blackjack = Blackjack {
     bribe :: !Int,
     -- | The payout multiplier counter, the actual multiplier is accessed via `multiplier`.
     multiplier_ :: !Int ,
-    -- | The fraction of wealth invested.
+    -- | The fraction of wealth betted.
     bet :: !Double } deriving (Eq, Ord, Show, Generic)
-data Action = Bet !Double | Draw | Win | Lose | Dealer | Hit | Stand | Bribe deriving (Eq, Ord, Show, Generic)
 
-instance Hashable Hand
-instance Hashable Action
---instance Hashable Blackjack
+multiplier :: Blackjack -> Double
+multiplier = (2+) . (*0.1) . fromIntegral . multiplier_
+
+bribeM :: Blackjack -> Double
+bribeM = (0.75 ^) . bribeM_
 
 instance Hashable Blackjack where
-    hash (Blackjack (Hand y ya) (Hand d da) s b_ b m b') = 
+    hash (Blackjack (Hand y ya) (Hand d da) s b_ b m b') =
         (    y
         .|. fromEnum ya `shiftL` 5
         .|.           d `shiftL` 6
@@ -76,32 +71,16 @@ instance Hashable Blackjack where
         .|.           m `shiftL` 17)
         `xor` fromIntegral (castDoubleToWord64 b')
 
-unBet :: Action -> Double
-unBet (Bet x) = x
-unBet _ = error "unBet: x != Bet y"
-
-isBet :: Action -> Bool
-isBet (Bet _) = True
-isBet _ = False
-
-draw :: [Hand]
-draw = Hand 0 True : (normalHand <$> ([2..10] ++ [10, 10, 10, 10]))
-
-normalHand :: Int -> Hand
-normalHand x = Hand x False
-
-blackjack0 :: Blackjack
-blackjack0 = Blackjack (Hand 0 False) (Hand 0 False) False 0 0 0 1
-
-multiplier :: Blackjack -> Double
-multiplier = (2+) . (*0.1) . fromIntegral . multiplier_
-
-bribeM :: Blackjack -> Double
-bribeM = (0.75 ^) . bribeM_
-
-deriving instance Serialize Hand
 deriving instance Serialize Blackjack
-deriving instance Serialize Action
+
+{-|
+The type of hands, holding cards with values summing up to `normals` with an optional additional `ace`.
+(This works, because a second ace always has a value of 1).
+-}
+data Hand = Hand { normals :: !Int , ace :: !Bool } deriving (Eq, Ord, Show, Generic)
+
+instance Hashable Hand
+deriving instance Serialize Hand
 
 instance Semigroup Hand where
     (Hand x y) <> (Hand z w)
@@ -111,15 +90,35 @@ instance Semigroup Hand where
 instance Monoid Hand where
     mempty = Hand 0 False
 
+{-|
+The total space of actions that can be taken in a game of blackjack.
 
--- * Problem statement
-blackjackP :: (Monad m, Fractional s, Mixture s, Ord s) => DPProblem Blackjack s Action m
-blackjackP = DPProblem srch blackjackVal $ \ (s, _, ea) -> do
-    return (s, fromLeft Nothing ea)
-    where
-    srch b 
-      | valueHand (you b) == 0 = uniSearch 1 Bet 0 1 b
-      | otherwise = enumSearch blackjackAct b
+Of these, the actions a player can take are `Bet`, `Hit`, `Stand`, and `Bribe`.
+The others are internal actions to allow for better (and more readable) memoization. 
+-}
+data Action = Bet !Double  -- ^ Bet a fraction of your wealth
+            | Draw         -- ^ Occurs when the game is drawn
+            | Win          -- ^ Occurs when the game is won
+            | Lose         -- ^ Occurs when the game is lost
+            | Dealer       -- ^ Occurs when the dealer has to hit
+            | Hit          -- ^ Hit
+            | Stand        -- ^ Stand
+            | Bribe        -- ^ Bribe the dealer up to 3 times, trading 25% of your remaining potential winnings,
+                           -- for an additional 25% to hit a good card (see `blackjackVal`), decreasing by 25% for each hit.
+    deriving (Eq, Ord, Show, Generic)
+
+deriving instance Serialize Action
+
+unBet :: Action -> Double
+unBet (Bet x) = x
+unBet _ = error "unBet: x != Bet y"
+
+isBet :: Action -> Bool
+isBet (Bet _) = True
+isBet _ = False
+
+normalHand :: Int -> Hand
+normalHand x = Hand x False
 
 valueHand :: Hand -> Int
 valueHand (Hand n a)
@@ -127,9 +126,72 @@ valueHand (Hand n a)
     | a = n + 1
     | otherwise = n
 
+drawDistribution :: [Hand]
+drawDistribution = Hand 0 True : (normalHand <$> ([2..10] ++ [10, 10, 10, 10]))
+
+
+-- | The initial state of a game of blackjack.
+blackjack0 :: Blackjack
+blackjack0 = Blackjack (Hand 0 False) (Hand 0 False) False 0 0 0 1
+
+{-|
+The problem statement for optimal blackjack play, geared towards objective functions for which it makes to not go all in.
+(That is, long-term strategies).
+
+Exhaustively searches whether to `Hit`, `Stand`, or `Bribe`, but uses a golden section search to find a good betting fraction.
+-}
+blackjackP :: (Monad m, Fractional s, Mixture s, Ord s) => DPProblem Blackjack s Action m
+blackjackP = DPProblem srch blackjackVal
+    where
+    srch b
+      | valueHand (you b) == 0 = uniSearch 12 Bet 0 1 b
+      | otherwise = enumSearch blackjackAct b
+{-
+{-|
+The problem statement for optimal blackjack play, geared towards optimizing the expected value of a single round.
+-}
+
+blackjackP' :: (Monad m, Fractional s, Mixture s, Ord s) => DPProblem Blackjack s Action m
+blackjackP' = DPProblem (enumSearch blackjackAct) blackjackVal
+-}
+
+{-|
+The set of available actions for each state.
+
+Some notes:
+Ideally, we model the case in which we never lose, but we cannot for obvious reasons.
+Fortunately the game does not go on infinitely and at some point the increase in the multiplier becomes neglegible (at the scale you are expected to lose).
+
+The next most ideal model would solve some (piecewise) linear equation to obtain an estimate for the reward in late round.
+This doesn't work either, because the matrix is huge (something like n=10584) and dense.
+(Which is still tractable probably, but it also needs some clever searching to get the strategy to settle on something first).
+
+Something similar happens for draws, since this doesn't increment the multiplier, and therefore refers back to the previous state;
+which would also require solving a big linear equation.
+
+Instead, we truncate the game after round 30.
+This does influence the behaviour and results in the last rounds, but this is drowned out by the small chance of getting there from earlier rounds (hopefully).
+
+The set of actions is given as:
+- if your hand is empty, bet and draw two cards for you and the dealer each
+- if the value of your hand goes over 21, you lose
+- if the value of the dealer's hand goes over 21, you win
+- if the dealer gets a blackjack
+    - and you don't, you lose
+    - and you do, you draw
+- if you get a blackjack, you win
+- if you are standing
+    - and the dealer has a better hand, you lose
+    - and the dealer's hand has value less than 17, the dealer hits
+    - if the your and the dealer's hand are of the same value, you draw
+    - otherwise, you win
+- you can hit or stand
+- if you bribed less than 3 times, you can also bribe
+-}
 blackjackAct :: Fractional s => Blackjack -> Either s [Action]
 blackjackAct b
-  | multiplier_ b > 0 = Left 0
+  | multiplier_ b > 30 = Left 0
+  | y == 0  = Right [Bet 1] -- NOTE: leave this here so if you remove the `uniSearch`, you get back the normal expected value. 
   | y > 21  = lose
   | d > 21  = win
   | d == 21 = if y == 21 then draw' else lose
@@ -145,10 +207,11 @@ blackjackAct b
   y = valueHand $ you b
   d = valueHand (dealer b)
 
+-- | Calculate the objective value of performing an action in the given state
 blackjackVal :: (Monad m, Fractional stat, Mixture stat) => Blackjack -> (Blackjack -> m stat) -> Action -> m stat
 blackjackVal b v (Bet f) = do
-    essBet <- forM (liftA2 (<>) draw draw) $ \ drawYou ->
-        forM (liftA2 (<>) draw draw) $ \ drawDealer ->
+    essBet <- forM (liftA2 (<>) drawDistribution drawDistribution) $ \ drawYou ->
+        forM (liftA2 (<>) drawDistribution drawDistribution) $ \ drawDealer ->
         v (b { you = drawYou , dealer = drawDealer , bet = f })
     let eBet = avg $ concat essBet
     return eBet
@@ -163,7 +226,7 @@ blackjackVal b v Win    = do
 blackjackVal b _ Lose    = do
     return $ realToFrac (-bet b)
 blackjackVal b v Dealer = do
-    esHit <- forM draw $ \ drawDealer ->
+    esHit <- forM drawDistribution $ \ drawDealer ->
         v (b { dealer = dealer b <> drawDealer })
     return $ avg esHit
 blackjackVal b v Hit    = do
@@ -174,7 +237,7 @@ blackjackVal b v Hit    = do
         then v (b { you = Hand 21 False })
         else v (b { you = you b <> normalHand 10 , bribe = bribe' })
 
-    esHit <- forM draw $ \ drawYou ->
+    esHit <- forM drawDistribution $ \ drawYou ->
         v (b { you = you b <> drawYou , bribe = bribe' })
 
     let eHitFair = avg esHit
@@ -197,7 +260,7 @@ graph :: M.Map k a -> M.Map k (k, a)
 graph = M.mapWithKey (,)
 
 dumpCSV' :: IO ()
-dumpCSV' = kellyUniCompactStored >>= dumpCSV 
+dumpCSV' = kellyUniCompactStored >>= dumpCSV
 
 dumpCSV :: M.Map (Hand, Hand, Int, Int) [(Int, Action)] -> IO ()
 dumpCSV table = do
@@ -222,7 +285,7 @@ dumpCSV table = do
 
             return (i, j, unlines $ intercalate "," <$> body)
 
--- some stored tables
+{-
 compactKellyEnumStored :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
 compactKellyEnumStored = fromRight (error "bad read: compactKellyEnumStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly_red.bin"
 
@@ -231,17 +294,19 @@ kellyEnumStored = M.fromList . fromRight (error "bad read: kellyEnumStored") . d
 
 kellyUniStored :: IO (M.Map Blackjack (Double, Maybe Action))
 kellyUniStored = M.fromList . fromRight (error "bad read: kellyUniStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly_uni.bin"
+-}
 
 kellyUniCompactStored :: IO (M.Map (Hand, Hand, Int, Int) [(Int, Action)])
 kellyUniCompactStored = M.fromList . fromRight (error "bad read: kellyUniCompactStored") . decode <$> BS.readFile "tables_test/holocure_blackjack_kelly_uni_compact.bin"
 
 computeAndStore :: IO ()
 computeAndStore = do
-    table <- blackjackTableRed :: (IO (HM.HashMap Blackjack (MaxMean (LogP1 (Mean Double)), Maybe Action)))
+    table <- blackjackTableRed :: (IO (HM.HashMap Blackjack (MaxMean (Log1P (Mean Double)), Maybe Action)))
     print $ length table
     print $ table HM.!? blackjack0
-    --let compTable = compact $ summary $ M.fromList $ HM.toList table
-    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly_uni.bin.bak" $ encode $ HM.toList $ first mean <$> table
+    let compTable = compact $ summary $ M.fromList $ HM.toList table
+    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly_uni_compact.bin" $ encode $ M.toList compTable
+    _ <- BS.writeFile "tables_test/holocure_blackjack_kelly_uni.bin" $ encode $ HM.toList $ first mean <$> table
     return ()
 
 compact :: HasMean v Double => M.Map (Hand, Hand, Int, Int) [(Blackjack, (v, Action))] -> M.Map (Hand, Hand, Int, Int) [(Int, Action)]
@@ -265,9 +330,4 @@ summary table = M.mapKeysWith (++) (\ b -> (you b , dealer b , bribe b , bribeM_
         [(b, (s, a)) | multiplier_ b < 20 && (a `elem` [Hit,Stand,Bribe] && lookup (multiplier_ b) v == Just (bet b) || isBet a)]
 
 blackjackTableRed :: (Ord s, Fractional s, Mixture s) => IO (HM.HashMap Blackjack (s, Maybe Action))
-blackjackTableRed = do
-    !t <- blackjackTable
-    execDP (reducedP t blackjackP) blackjack0
-
-blackjackTable :: (Ord s, Fractional s, Mixture s) => IO (HM.HashMap Blackjack (s, Maybe Action))
-blackjackTable = execDP blackjackP blackjack0
+blackjackTableRed = reducedDP blackjackP blackjack0
