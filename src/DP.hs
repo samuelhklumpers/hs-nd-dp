@@ -26,11 +26,13 @@ It does not:
 -}
 module DP (
     DPProblem(..),
+    DDPProblem(..),
     enumSearch,
     uniSearch,
     execDP,
     reducedP,
-    reducedDP
+    reducedDP,
+    solveDDP
 ) where
 
 import Data.Foldable (maximumBy)
@@ -56,6 +58,15 @@ data DPProblem s v a m =
         -- | Returns the objective value of performing an action `a` in a state `s`.
         actValue :: s -> (s -> m v) -> a -> m v
     }
+
+data DDPProblem s v a m =
+    DDPProblem {
+        -- | The search procedure over `a`.
+        search' :: Search s v a m,
+        -- | Returns the objective value of performing an action `a` in a state `s`.
+        actValue' :: s -> a -> m (v -> v, s)
+    } 
+
 
 type Search s v a m = s -> (a -> m v) -> m (v, Maybe a)
 
@@ -150,6 +161,39 @@ solveDP p memRef s = do
             r@(!_, _) <- search p s $ actValue p s (fmap fst . solveDP p memRef)
             modifyIORef' memRef (HM.insert s r)
             return r
+
+solveDDP :: Hashable s => DDPProblem s v a IO -> s -> IO (v, [a], s) 
+solveDDP (DDPProblem srch val) s = do
+    memRef <- newIORef mempty
+    (v, a) <- solveDP (DPProblem srch val') memRef s
+    m <- readIORef memRef
+    (xs, s') <- go s a m
+    return (v, xs, s')
+    where
+    val' s v a = do
+        (dv, s') <- val s a
+        dv <$> v s'
+
+    go s Nothing  _ = return ([], s)
+    go s (Just a) m = do
+        (_, s') <- val s a
+        let (_, a') = m HM.! s'
+        (xs, s'') <- go s' a' m
+        return (a : xs, s'')
+{-    (xs, s') <- go s a m
+    return (v, xs, s')
+    where
+    val' s v a = do
+        (dv, s') <- val s a
+        dv <$> v s'
+
+    go s Nothing  _ = return ([], s)
+    go s (Just a) m = do
+        (_, s') <- val s a
+        let (_, a') = m HM.! s'
+        (a :) <$> go s' a' m
+
+        return _-}
 
 {-|
 `execDP` solves a `DPProblem` in `IO` from a given initial state, returning the entire table mapping states to their optimal actions and objective values.
