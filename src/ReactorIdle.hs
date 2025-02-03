@@ -11,11 +11,11 @@ import Data.Hashable (Hashable)
 import GHC.Generics (Generic)
 
 import DP
-import Data.List (find, sortOn)
+import Data.List (find, sortOn, sort)
 import Control.Monad (ap, forM, forM_, replicateM)
 import Text.Printf (printf)
 import Data.Foldable (fold)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromMaybe)
 import Data.Containers.ListUtils (nubOrdOn)
 import Control.Monad.State.Lazy (get, StateT (runStateT), put)
 import Control.Monad.Trans (lift)
@@ -47,7 +47,7 @@ baseHeat c = case c of
     Fusion  -> 2.5e9
     Thorium -> 150e9
     Protactium -> 9e12
-    
+
 cellCost :: Cell -> Float
 cellCost c = case c of
     Thermo  -> 20e9
@@ -77,11 +77,29 @@ data Spec = Spec { specCellType :: Cell, specCells :: Int
                  , specIsos :: Int, specCirc :: Bool }
     deriving (Eq, Ord, Generic, Hashable)
 
-newtype Build = Build { runBuild :: M.Map Upgrade Level }
+instance Semigroup Spec where
+    (<>) = error "Semigroup Spec"
+
+instance Monoid Spec where
+    mempty = Spec Fusion 0 Gen2 0 Pump 0 0 False
+
+
+newtype Build' a = Build { runBuild :: M.Map Upgrade a }
     deriving (Eq, Ord, Generic, Hashable)
+
+instance Functor Build' where
+    fmap f = Build . fmap f . runBuild 
+
+type Build = Build' Level
 
 data Plant = Plant { plantBuild :: Build , plantSpec :: Spec , plantCells :: Int }
     deriving (Eq, Ord, Generic, Hashable)
+
+instance Semigroup Plant where
+    (<>) = error "Semigroup Plant"
+
+instance Monoid Plant where
+    mempty = Plant mempty mempty 0
 
 instance Show Spec where
     show (Spec cT cN gT gN pT pN iN iC) = if iC then y ++ "C" else y
@@ -90,7 +108,7 @@ instance Show Spec where
         z = if pT == Pump then x ++ "P" else x
         y = if iN > 0 then z ++ ":" ++ show iN else z
 
-instance Show Build where
+instance Show a => Show (Build' a) where
     show (Build b) = unwords $ (\ (u, n) -> upgradeShortName u ++ show n) <$> M.toList b
 
 upgradeShortName :: Upgrade -> String
@@ -121,6 +139,22 @@ upgradeCost u n = upgradeBase u * upgradeScale u ^ n
 
 upgradeToCost :: Upgrade -> Level -> Float
 upgradeToCost u n = upgradeBase u * (1 - s ^ n) / (1 - s)
+    where
+    s = upgradeScale u
+
+buildCostTo' :: Build' a -> a
+buildCostTo' = x --(if any (< 0) (runBuild b) then traceShow b else id) x b
+    where
+    x = sum . fmap (uncurry upgradeToCost') . M.toList . runBuild
+
+buildCostFromTo' :: Build' a -> Build' a -> a
+buildCostFromTo' bx by = buildCostTo' (Build $ M.unionWith max (runBuild bx) (runBuild by)) - buildCostTo' bx
+
+upgradeCost' :: Upgrade -> a -> Float
+upgradeCost' u n = upgradeBase u * upgradeScale u ^ n
+
+upgradeToCost' :: Upgrade -> a -> a
+upgradeToCost' u n = upgradeBase u * (1 - s ** n) / (1 - s)
     where
     s = upgradeScale u
 
@@ -218,6 +252,9 @@ pumpWater p pL = baseWater p * 1.5 ^ pL
         Pump -> 25e3
         GroundPump -> 67.5e3
 
+genWater :: Gen -> Level -> Float
+genWater g gL = genWaterBase g * 1.25 ^ gL
+
 
 isoMult :: Int -> Level -> Float
 isoMult i n = 1 + fromIntegral i * (0.05 * (1 + fromIntegral n))
@@ -225,10 +262,10 @@ isoMult i n = 1 + fromIntegral i * (0.05 * (1 + fromIntegral n))
 cellHeat :: Cell -> Level -> Float
 cellHeat c n = baseHeat c * 1.25 ^ n
 
-instance Semigroup Build where
+instance Semigroup a => Semigroup (Build' a) where
     x <> y = Build (runBuild x <> runBuild y)
 
-instance Monoid Build where
+instance Monoid a => Monoid (Build' a) where
     mempty = Build mempty
 
 -- data Research
@@ -315,6 +352,21 @@ cellLife b cT = 800 * 2 ^ M.findWithDefault 0 (CellLife cT) (runBuild b)
 plantNetHeat :: Plant -> Float
 plantNetHeat p = plantHeat p - plantCellCost p
 
+plantNetHeat' :: Build' a -> Spec -> Int -> Float
+plantNetHeat' b s n = fromIntegral n * (h - fromIntegral cN * cellCost cT / cl)
+    where
+    cT = specCellType s
+    cN = specCells s
+    cl = 800 * 2 ^ M.findWithDefault 0 (CellLife cT) (runBuild b)
+    upgrades = runBuild b
+
+    cL = M.findWithDefault 0 (CellHeat cT) upgrades
+    iN = specIsos s
+    iL = M.findWithDefault 0 IsoMult upgrades
+    
+    h = fromIntegral cN * baseHeat cT * 1.25 ^ cL * (1 + fromIntegral iN * (0.05 * (1 + fromIntegral iL)))
+
+
 specHeat :: Build -> Spec -> Float
 specHeat b s = fromIntegral cN * cellHeat cellType cL * isoMult iN iL where
     upgrades = runBuild b
@@ -331,7 +383,7 @@ data Plants = Island | Village | Region | City | SHC | Metro | FHC | Mainland | 
 boundedEnum :: (Enum a, Bounded a) => [a]
 boundedEnum = enumFrom minBound
 
-newtype Game = Game { runGame :: M.Map Plants Plant }
+newtype Game = Game { gamePlant :: M.Map Plants Plant }
 
 plantBuyCost :: Plants -> Float
 plantBuyCost p = case p of
@@ -341,12 +393,12 @@ plantBuyCost p = case p of
 nextUpgrades :: Game -> [(Float, Plants, Plant)]
 nextUpgrades g = [
     (0, pn, Plant b s n)
-    | (pn, p) <- M.toList (runGame g)
+    | (pn, p) <- M.toList (gamePlant g)
     , sn@(s, n) <- M.findWithDefault [] pn specs
     , b <- plantNextUpgrades p sn
     ] ++ [
     (plantBuyCost pn, pn, Plant b s n)
-    | pn <- boundedEnum :: [Plants], pn `M.notMember` runGame g
+    | pn <- boundedEnum :: [Plants], pn `M.notMember` gamePlant g
     , sn@(s, n) <- M.findWithDefault [] pn specs
     , b <- plantNextUpgrades (Plant mempty s n) sn
     ]
@@ -367,7 +419,7 @@ bestUpgrades g = do
 
     nu' <- forM nu $ \ (pbc, pn, p) -> do
         p' <- completeBuild' p
-        let stats = upgradeEfficiency power pbc (runGame g M.!? pn) p'
+        let stats = upgradeEfficiency power pbc (gamePlant g M.!? pn) p'
         return (stats, pn, p')
 
     let nu'' = sortOn (\ (hrs, _, _) -> hrs) nu'
@@ -375,8 +427,127 @@ bestUpgrades g = do
     return $ nubOrdOn (\ (_, pn, _) -> pn) nu''
 
 
+
 gamePower :: Game -> Float
-gamePower g = sum $ fmap plantHeat $ M.elems $ runGame g
+gamePower g = sum $ fmap plantHeat $ M.elems $ gamePlant g
+
+gameBest :: Game -> (UpgradeStats, Plants, Plant)
+gameBest g = minimum $ do
+    pn <- boundedEnum :: [Plants]
+
+    let (p, acc) = maybe (mempty, plantBuyCost pn) (, 0) (gamePlant g M.!? pn)
+    let (u, p') = plantBest g pn p acc
+    
+    return (u, pn, p')
+
+plantBest :: Game -> Plants -> Plant -> Float -> (UpgradeStats, Plant)
+plantBest g pn p acc = minimum $ do
+    let (Plant _ s n) = p
+    
+    sn@(s', n') <- specs M.! pn
+    let acc' = max 0 $ fromIntegral n' * specCost s' - fromIntegral n * specCost s
+    let (u, b') = buildBest g p sn (acc' + acc) 
+    
+    return (u, Plant b' s' n')
+
+buildBest :: Game -> Plant -> (Spec, Int) -> Float -> (UpgradeStats, Build)
+buildBest g p@(Plant b _ _) (s', n') acc = let (u, bc) = go (fromIntegral <$> b) (1/0 :: Float) in
+        (undefined, undefined)
+    where
+    {- bC = buildCostFromTo b b' -}
+    go b' upper = case bs' of
+            []           -> (upgradeEfficiency' (gamePower g) acc p b' s' n', b')
+            ((e, b''):_) -> go b'' e
+        where
+        bs' = sort [(e, b'') | (e, b'') <- wiggle g p s' b' n' acc, e < upper ]
+    -- start at some simple build
+    -- hill climb (descent)
+    -- TODO continuous version w/ actual gradient descent
+
+wiggle :: Game -> Plant -> Spec -> Build' Float -> Int -> Float -> [(Float, Build' Float)]
+wiggle g p@(Plant b _ _) s' b' n' acc = do
+    us <- allUpgradeSets g s'
+
+    let b'' = autoFillBuild' s' $ Build $ M.unionWith (+) (runBuild b') (M.fromList us)
+
+    let cost  = acc + buildCostFromTo' ((fromIntegral :: Level -> Float) <$> b) b''
+    let costH = cost / 3600 / fromIntegral tps
+
+    let dh = plantNetHeat' b'' s' n' - plantNetHeat p
+
+    let power = gamePower g
+    let buy = costH / power
+    let ret = costH / max 0 dh
+
+    let e = buy + ret
+
+    return (e, b'')
+
+allUpgradeSets :: Game -> Spec -> [[(Upgrade, Level)]]
+allUpgradeSets g s = genericUpgrades -- ++ upgradeCombos
+    where
+    --cT = specCellType s
+    --pT = specPumpType s
+
+    genericUpgrades = [[(u, d)] | u <- relevantUpgrades g s, d <- [-1, 1]]
+    {-
+    upgradeCombos   = [
+        [(PumpWater pT, 1), (GenMaxWater, 2)],
+        [(PumpWater pT, 1), (GenMaxWater, 1)],
+
+        [(PumpWater pT, 1), (CircMult, 1)]
+        ]
+    -}
+
+relevantUpgrades :: Game -> Spec -> [Upgrade]
+relevantUpgrades g s = [
+    CellHeat cT, CellLife cT, GenMaxWater, PumpWater pT]
+    ++ [IsoMult | specIsos s > 0]
+    ++ [CircMult | specCirc s]
+    where
+    cT = specCellType s
+    pT = specPumpType s
+
+autoFillBuild' :: Spec -> Build' Float -> Build' Float
+autoFillBuild' s b = Build $
+    M.insert GenEff geL $
+    M.insert ElemMaxWater (pL + 2) $
+    M.insert (PumpWater pT) pL $ fromIntegral <$> runBuild b
+    where
+    upgrades = runBuild b
+    cT = specCellType s
+    pT = specPumpType s
+    gT  = specGenType s
+
+    cN = specCells s
+    cL = M.findWithDefault 0 (CellHeat cT) upgrades
+    pN = specPumps s
+    iN = specIsos s
+    iL = M.findWithDefault 0 IsoMult upgrades
+    gN = specGens s
+    gL = M.findWithDefault 0 GenMaxWater upgrades
+    qN = specCirc s
+    qL = M.findWithDefault 0 CircMult upgrades
+
+    heat   = fromIntegral cN * isoMult iN iL * cellHeat cT cL
+    water  = fromIntegral gN * genWater gT gL * circMult qN qL
+    excess = heat - genWaterMult gT * water
+
+    geL = logBase 1.25 $ max (excess / fromIntegral gN / genHeatBase gT) 1
+    pL = logBase 1.5 $ max (water / fromIntegral pN) 1
+
+
+
+upgradeEfficiency' :: Float -> Float -> Plant -> Build' Float -> Spec -> Int -> UpgradeStats
+upgradeEfficiency' power cost p b' s' n' = UpgradeStats cost (buy + ret) buy ret h0 dh
+    where
+    buy = costH / power
+    ret = costH / max 0 dh
+
+    costH  = cost / 3600 / fromIntegral tps
+
+    h0   = plantNetHeat p
+    dh   = plantNetHeat' b' s' n' - h0
 
 upgradeEfficiency :: Float -> Float -> Maybe Plant -> Plant -> UpgradeStats
 upgradeEfficiency power pbc p q = UpgradeStats cost (buy + ret) buy ret h0 dh
@@ -687,7 +858,7 @@ showBest :: IO ()
 showBest = do
     best <- bestUpgrades game
     forM_ best $ \ (stats, pn, p') -> do
-        let p = runGame game M.!? pn
+        let p = gamePlant game M.!? pn
         formatUpgrade p p' pn stats
 
 
@@ -697,7 +868,7 @@ formatUpgrade p p' pn stats = do
 
     let diff' = buildDiff b (plantBuild p')
     let diff = unwords $ mapMaybe (\ (u, (a, b)) -> if a /= b then Just $ upgradeShortName u ++ show a ++ "->" ++ show b else Nothing) $ M.toList diff'
-    
+
     let s1 = maybe "New" (show . plantSpec) p
     if fmap plantSpec p == Just (plantSpec p') then
         putStrLn $ printf "%-10s: %-50s, %-50s, %s" (show pn) (show stats) (show (plantSpec p')) diff
@@ -729,7 +900,7 @@ plantStats p = PlantStats h h' hn hh bat
 
 showPower :: IO ()
 showPower = do
-    let stats = plantStats <$> runGame game
+    let stats = plantStats <$> gamePlant game
     let total = fold $ M.elems stats
 
     forM_ (M.toList stats) $ \ (pn, stats) -> do
@@ -760,9 +931,9 @@ stepGame = do
 
     nu <- lift $ bestUpgrades g
     let (stats, pn, p') = head nu
-    let p = runGame g M.!? pn
+    let p = gamePlant g M.!? pn
 
-    let g' = Game $ M.insert pn p' $ runGame g
+    let g' = Game $ M.insert pn p' $ gamePlant g
 
     put g'
     lift $ formatUpgrade p p' pn stats
