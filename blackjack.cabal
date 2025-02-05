@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -28,7 +28,8 @@ library
       Blackjack
       DP
       Probability
-      ReactorIdle
+      RI.Data
+      RI.ReactorIdle
   other-modules:
       Paths_blackjack
   autogen-modules:
@@ -42,7 +43,6 @@ library
     , cereal
     , containers
     , hashable
-    , hmatrix
     , mtl
     , transformers
     , unordered-containers
@@ -64,7 +64,6 @@ executable blackjack-exe
     , cereal
     , containers
     , hashable
-    , hmatrix
     , mtl
     , transformers
     , unordered-containers
@@ -87,7 +86,6 @@ test-suite blackjack-test
     , cereal
     , containers
     , hashable
-    , hmatrix
     , mtl
     , transformers
     , unordered-containers
