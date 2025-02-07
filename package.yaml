@@ -27,6 +27,7 @@ dependencies:
 - bytestring
 - hashable
 - unordered-containers
+- list-t
 
 ghc-options:
 - -O2

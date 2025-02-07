@@ -2,6 +2,30 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
+
+{-
+module RI.ReactorIdle (
+    gameBest,
+    upgradeShortName,
+    gameBest',
+    plantHeat,
+    plantCellCost,
+    tps,
+    Game(..),
+    Spec(..),
+    Plant'(..),
+    Build'(..),
+    Plant,
+    Build,
+    Plants(..),
+    Upgrade(..),
+    UpgradeStats(..),
+    Cell(..),
+    Gen(..),
+    Pump(..) ) where
+-}
 
 module RI.ReactorIdle ( module RI.ReactorIdle ) where
 
@@ -9,9 +33,12 @@ import qualified Data.Map as M
 import Data.Hashable (Hashable)
 import GHC.Generics (Generic)
 import Text.Printf (printf)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromJust, fromMaybe)
 import Data.Function
 import Control.Monad
+import ListT
+import Control.Monad.State
+import Debug.Trace
 
 
 boundedEnum :: (Enum a, Bounded a) => [a]
@@ -281,19 +308,91 @@ instance Ord UpgradeStats where
 instance Show UpgradeStats where
     show (UpgradeStats c e b r h0 dh) = printf "% 6.2f = % 6.2f + % 6.2f -> +% 8.2e (% 6.2f%%) for % 8.2e" e b r dh (100 * dh / h0) c
 
-
--- TODO move
 type Specs = M.Map Plants [(Spec, Int)]
 
 tps :: Int
 tps = 5
+
+data Research = RProtactium | RCirc deriving (Eq, Ord, Show)
+
+plantPrereqs :: Plant -> [Research]
+plantPrereqs (Plant b s n) = buildPrereqs b ++ specPrereqs s
+
+specPrereqs :: Spec -> [Research]
+specPrereqs s = [RCirc | specCirc s] ++ [RProtactium | specCellType s == Protactium]
+
+buildPrereqs :: Build -> [Research]
+buildPrereqs _ = []
+
+takeWhileT :: (Monad m) => (a -> Bool) -> ListT m a -> ListT m a
+takeWhileT f t = do
+    unT <- lift $ uncons t
+    case unT of
+        Nothing     -> mempty
+        Just (h, t) -> if f h then
+            cons h (takeWhileT f t)
+            else
+            mempty
+
+{-
+researchBest' :: [Research] -> Specs -> ListT (State Game) (Game, Either (UpgradeStats, Plants, Plant) (Research, Level))
+researchBest' block s = do
+    g <- get
+
+    -- 1. Find the best upgrade
+    let o@(_, pn, p') = gameBest s g block
+    let g' = Game $ M.insert pn p' $ gamePlant g
+
+    -- 2. Does this upgrade use research we don't have yet?
+    case dropWhile (`elem` gameResearch g) $ plantPrereqs p' of
+        []         -> do
+            -- 3. If not, yield the upgrade and update the state to after applying the upgrade
+            put g'
+            cons (g, Left o) $ researchBest' block s
+        (prereq:_) -> do
+            -- 4. 
+            let (Just (_, f), gUp) = flip runState g $ ListT.head $ researchBest' (prereq:block) s
+            let (_, pnUp, pUp) = either id (error "not implemented: double research") f
+
+            -- check what happens if you research first
+            let (lks', gRLk) = flip runState g' $ ListT.toList $ takeWhileT (either (\ (_, _, p) -> usesResearch prereq p) (const False) . snd) $ ListT.take 4 $ researchBest' block s
+            let lks = fmap (either id (error "not implemented: double research") . snd) lks'
+
+            -- patch the result of researching first onto upgrading first
+            -- and vice versa
+            -- compare time taken
+
+            -- NB: not handled: grouping researches
+            let rT = fastResearch g prereq
+            let upRT = fastResearch gUp prereq
+
+            let rLksUp = flip runState gRLk $ applyUpgrade pnUp pUp
+            let upRLks = flip runState gUp $ forM_ lks $ \ (_, pn, p) -> applyUpgrade pn p
+
+            undefined
+
+gameResearch :: Game -> [Research]
+gameResearch = _
+
+researchBest :: Specs -> ListT (State Game) (Game, Either (UpgradeStats, Plants, Plant) (Research, Level))
+researchBest = researchBest' []
+-}
+
+data ResearchStats = ResearchStats {  }
+
+fastResearch :: Game -> Research -> ResearchStats
+fastResearch = undefined
+
+usesResearch :: Research -> Plant -> Bool
+usesResearch r p = r `elem` plantPrereqs p
 
 gameBest :: Specs -> Game -> (UpgradeStats, Plants, Plant)
 gameBest s g = minimum $ gameBest' s g
 
 gameBest' :: Specs -> Game -> [(UpgradeStats, Plants, Plant)]
 gameBest' specs g = catMaybes $ do
-    pn <- boundedEnum :: [Plants]
+    pn <- --[Island] 
+        boundedEnum :: [Plants]
 
     let (p, acc) = maybe (mempty, plantBuyCost pn) (, 0) (gamePlant g M.!? pn)
     
@@ -315,24 +414,34 @@ plantBest specs g pn p acc = case specs M.!? pn of
 
 buildBest :: Game -> Plant -> (Spec, Int) -> Float -> (UpgradeStats, Build)
 buildBest g p@(Plant b _ _) (s', n') acc = go b
-    {-let bc = go b in
-    let acc' = acc + buildCostFromTo b bc in
-    (mkUpgradeStats (gamePower g) p (Plant bc s' n') acc', Build $ M.unionWith max (runBuild b) (runBuild bc))-}
     where
     go b' = case bs' of
             [] -> (UpgradeStats 0 (1/0) 0 0 0 0, b')
             bs -> minimum bs
         where
-        --bs' = sort [(e, b'') | (e, b'') <- wiggle g p (Plant b' s' n') acc, e < upper ]
         bs' = allBuilds g p (Plant b' s' n') acc
-
--- TODO all the float builds was a cool idea but it doesn't work
--- also rounding is a nightmare, so get rid of it
--- TODO actually forget about climbing, you probably just need a full (bounded) search
 
 upgradeEffect :: (Real a, Real b) => Float -> Plant' a -> Plant' b -> Float -> Float
 upgradeEffect power p q cost = upgradeEff $ mkUpgradeStats power p q cost
 
+applyUpgrade :: (MonadState Game m) => Plants -> Plant -> m UpgradeStats
+applyUpgrade pn q = do
+    u <- getUpgradeStats pn q
+    g <- get
+    put $ g { gamePlant = M.insert pn q (gamePlant g) } 
+    return u
+
+getUpgradeStats :: (MonadState Game m) => Plants -> Plant -> m UpgradeStats
+getUpgradeStats pn q = do
+    g <- get
+    return $ getUpgradeStats' g pn q
+
+getUpgradeStats' :: Game -> Plants -> Plant -> UpgradeStats
+getUpgradeStats' g pn q = mkUpgradeStats (gamePower g) p q c
+    where
+    p' = gamePlant g M.!? pn
+    p = fromMaybe mempty p'
+    c = plantCostFromTo p q + maybe (plantBuyCost pn) (const 0) p'
 
 mkUpgradeStats :: (Real a, Real b) => Float -> Plant' a -> Plant' b -> Float -> UpgradeStats
 mkUpgradeStats power p q cost = UpgradeStats cost eff buy ret h0 dh
@@ -356,27 +465,53 @@ roundBuild (Build b) = Build $ M.mapWithKey go b
 
 
 allBuilds :: Game -> Plant -> Plant -> Float -> [(UpgradeStats, Build)]
-allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = do
+allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = flip evalState (1/0) $ toReverseList $ do
     let (Spec cT _ _ _ _ _ iN ciN) = s' 
 
     let lowerB = M.unionWith max (runBuild b) (runBuild b')
-    let gmwL0 = M.findWithDefault 0 GenMaxWater lowerB
-    let geL0 = M.findWithDefault 0 GenEff lowerB
+    let gmwL0 = max 30 $ M.findWithDefault 0 GenMaxWater lowerB
+    let geL0 = max 60 $ M.findWithDefault 0 GenEff lowerB
     let ciL0 = M.findWithDefault 0 CircMult lowerB
 
     let lowerH = plantNetHeat p :: Float
+    let pPH = gamePowerH g
+    
+    ciL <- fromFoldable $ if ciN then [ciL0 - 1..20] else [0]
+    let cCI = upgradeToCost CircMult ciL / pPH
+    upperT <- lift get
+    guard (cCI < upperT) 
 
-    cL <- [0..20]
-    iL <- if iN > 0 then [0..20] else [0]
-    gmwL <- [gmwL0 - 1..80]
-    geL <- [geL0 - 1..90]
-    ciL <- if ciN then [ciL0 - 1..20] else [0]
+    iL <- fromFoldable $ if iN > 0 then [0..20] else [0]
+    let cI = cCI + upgradeToCost IsoMult iL / pPH
+    upperT <- lift get
+    --traceShow (cI, upperT) $ return ()
+    guard (cI < upperT) 
+
+    cL <- fromFoldable [0..20]
+    let cC = cI + upgradeToCost (CellHeat cT) cL / pPH
+    upperT <- lift get
+    --traceShow (cC, upperT) $ return ()
+    guard (cC < upperT) 
+
+    gmwL <- fromFoldable [gmwL0 - 1..80]
+    let cGMW = cC + upgradeToCost GenMaxWater gmwL / pPH
+    upperT <- lift get
+    --traceShow (cGMW, upperT) $ return ()
+    guard (cGMW < upperT) 
+
+{-
+    geL <- fromFoldable [geL0 - 1..90]
+    let cGE = cGMW + upgradeToCost GenEff geL / pPH
+    upperT <- lift get
+    --traceShow (cGE, upperT) $ return ()
+    guard (cGE < upperT) 
+-}
 
     let b'' = roundBuild $ autoFillBuild' s' $ Build $ fmap fromIntegral $ lowerB
             & M.insert (CellHeat cT) cL
             & M.insert IsoMult iL
             & M.insert GenMaxWater gmwL
-            & M.insert GenEff geL
+--            & M.insert GenEff geL
             & M.insert CircMult ciL
 
     let q = Plant b'' s' n'
@@ -386,66 +521,17 @@ allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = do
     let cost = acc + buildCostFromTo b b''
     let e = mkUpgradeStats (gamePower g) p q cost
 
-    return (e, b'')
-
-{-
-wiggle :: (Real a, Real b) => Game -> Plant' a -> Plant' b -> Float -> [(UpgradeStats, Build)]
-wiggle g p@(Plant b _ _) (Plant b' s' n') acc = do
-    us <- allUpgradeSets g s'
-    --traceShow us $ return ()
-
-    --traceShow (autoFillBuild' s' $ Build $ M.unionWith (+) (realToFrac <$> runBuild b') (fromIntegral <$> M.fromList us)) $ return ()
-
-    let b'' = roundBuild $ Build $
-            M.unionWith max (realToFrac <$> runBuild b) $
-            runBuild $ autoFillBuild' s' $ Build $
-            fmap (max 0) $
-            M.unionWith (+) (realToFrac <$> runBuild b') (fromIntegral <$> M.fromList us)
-    let q = Plant b'' s' n'
-
-    let cost = acc + buildCostFromTo (roundBuild $ realToFrac <$> b) b''
-    let e = mkUpgradeStats (gamePower g) p q cost
+    lift $ modify (min $ upgradeEff e)
 
     return (e, b'')
--}
 
-{-
-allUpgradeSets :: Game -> Spec -> [[(Upgrade, Level)]]
-allUpgradeSets g s = [[(u, d)] | u <- relevantUpgrades g s, d <- [-1, 1]]
-    ++ [
-        [(hu, hul), (wu, wul), (pu, pul)]
-        | (hu, huls) <- [(CellHeat cT, [0,1,2])] ++ [(IsoMult, [1..5]) | iN > 0]
-        , hul <- huls
-        , (wu, wuls) <- [(GenMaxWater, [0,1,2])] ++ [(GenEff, [1,2,3,4,5])] ++ [(CircMult, [1..2]) | circN ]
-        , wul <- wuls
-        , (pu, puls) <- [(PumpWater pT, [0,1])]
-        , pul <- puls
-    ]
-    where
-    cT = specCellType s
-    pT = specPumpType s
-    --gT = specGenType s
-
-    iN    = specIsos s
-    circN = specCirc s
--}
-
-{-
-relevantUpgrades :: Game -> Spec -> [Upgrade]
-relevantUpgrades g s = [
-    CellHeat cT, CellLife cT, GenMaxWater, PumpWater pT]
-    ++ [IsoMult | specIsos s > 0]
-    ++ [CircMult | specCirc s]
-    where
-    cT = specCellType s
-    pT = specPumpType s
--}
+gamePowerH :: Game -> Float
+gamePowerH g = gamePower g * fromIntegral tps * 3600
 
 autoFillBuild' :: Spec -> Build' Float -> Build' Float
-autoFillBuild' s b = Build $
-    M.insert GenEff geL $
-    M.insert ElemMaxWater (pL + 2) $
-    M.insert (PumpWater pT) pL $ runBuild b
+autoFillBuild' s b = {-# SCC "Build" #-} Build $ M.unionWith max
+    (M.fromList [(GenEff, geL), (ElemMaxWater, pL + 2), (PumpWater pT, pL)])
+    (runBuild b)
     where
     upgrades = runBuild b
     cT = specCellType s
@@ -453,7 +539,7 @@ autoFillBuild' s b = Build $
     gT  = specGenType s
 
     cN = specCells s
-    cL = M.findWithDefault 0 (CellHeat cT) upgrades
+    cL = {-# SCC "findWithDefault" #-} M.findWithDefault 0 (CellHeat cT) upgrades
     pN = specPumps s
     iN = specIsos s
     iL = M.findWithDefault 0 IsoMult upgrades
@@ -475,4 +561,4 @@ autoFillBuild' s b = Build $
     waterExcess = max 0 (- deficit) / genWaterMult gT
     waterUsage = water - waterExcess
 
-    pL = logBase 1.5 $ max (waterUsage / fromIntegral pN / pumpWaterBase pT) 1
+    pL = {-# SCC "logBase" #-} logBase 1.5 $ max (waterUsage / fromIntegral pN / pumpWaterBase pT) 1

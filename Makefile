@@ -1,5 +1,5 @@
 profile:
-	stack build --profile
+	stack build --profile --ghc-options "-fprof-auto"
 	stack exec --profile -- blackjack-exe +RTS -sstderr -p -hT
 #	stack exec --profile -- blackjack-exe +RTS -p -hy
 #	stack exec --profile -- blackjack-exe +RTS -p -hr

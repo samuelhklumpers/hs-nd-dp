@@ -69,10 +69,10 @@ prot1261C = Spec Protactium 1 Gen4 2 GroundPump 6 1 True
 specs :: M.Map Plants [(Spec, Int)]
 specs = M.fromList [
         (Island, [
-            (fusionG3_122, 4),
+            (fusionG3_122, 4){-,
             (fusionG3_111, 8),
             (fusionG4_122, 4),
-            (thoriumIsl, 4)
+            (thoriumIsl, 4)-}
         ]),
         (Village, [
             (fusion122, 11)
@@ -84,10 +84,11 @@ specs = M.fromList [
         (City, [
             --(fusion122, 42),
             (thorium1482, 13),
-            (thorium1261, 20)--,
-            --(thorium1_4_12_1C, 10),
-            --(thorium1261C, 19),
-            --(prot1261C, 19)
+            (thorium1261, 20)
+            {-,
+            (thorium1_4_12_1C, 10),
+            (thorium1261C, 19),
+            (prot1261C, 19)-}
         ]),
         (SHC, [
             (thoriumSHC, 1),
@@ -96,9 +97,10 @@ specs = M.fromList [
         (Metro, [
             (thorium1148, 20),
             (thorium1482, 19),
-            (thorium1261, 30)--,
-            --(thorium1261C, 27),
-            --(prot1261C, 26)
+            (thorium1261, 30)
+            {-,
+            (thorium1261C, 27),
+            (prot1261C, 26) -}
         ]),
         (FHC, [
             (thoriumFHC, 1),
@@ -106,11 +108,12 @@ specs = M.fromList [
         ]),
         (Mainland, [
             (thorium1482, 22),
-            (thorium1261, 33)--,
-            --(prot1_4_12_1C, 15),
+            (thorium1261, 33)
+            {-,
+            (prot1_4_12_1C, 15),
             -- probably v
-            --(thorium1261C, 29),
-            --(prot1261C, 29)
+            (thorium1261C, 29),
+            (prot1261C, 29) -}
         ])
     ]
 
@@ -170,13 +173,13 @@ plantRegion = Plant
 plantCity :: Plant
 plantCity = Plant
     (Build $ M.fromList
-        [(CellHeat Thorium, 10)
+        [(CellHeat Thorium, 12)
         ,(CellLife Thorium, 1)
         ,(IsoMult, 14)
         ,(GenEff, 87)
-        ,(GenMaxWater, 52)
-        ,(PumpWater GroundPump, 24)
-        ,(ElemMaxWater, 26)])
+        ,(GenMaxWater, 54)
+        ,(PumpWater GroundPump, 25)
+        ,(ElemMaxWater, 27)])
     thorium1482
     13
 
@@ -197,13 +200,13 @@ plantCity = Plant
 plantSHC :: Plant
 plantSHC = Plant
     (Build $ M.fromList
-        [(CellHeat Thorium, 3)
+        [(CellHeat Thorium, 5)
         ,(CellLife Thorium, 1)
         ,(IsoMult, 11)
-        ,(GenEff, 78)
-        ,(GenMaxWater, 42)
-        ,(PumpWater Pump, 20)
-        ,(ElemMaxWater, 20)])
+        ,(GenEff, 80)
+        ,(GenMaxWater, 44)
+        ,(PumpWater Pump, 21)
+        ,(ElemMaxWater, 23)])
     thoriumSHC
     1
 
@@ -262,10 +265,11 @@ plantFHC = Plant
 plantMainland :: Plant
 plantMainland = Plant
     (Build $ M.fromList
-        [(CellHeat Thorium, 10)
-        ,(GenMaxWater, 52)
-        ,(ElemMaxWater, 26)
-        ,(PumpWater GroundPump, 24)
+        [(CellHeat Thorium, 12)
+        ,(GenEff, 88)
+        ,(GenMaxWater, 55)
+        ,(ElemMaxWater, 28)
+        ,(PumpWater GroundPump, 26)
         ,(IsoMult, 14)]
     )
     thorium1482
