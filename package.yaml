@@ -28,6 +28,7 @@ dependencies:
 - hashable
 - unordered-containers
 - list-t
+- mmorph
 
 ghc-options:
 - -O2

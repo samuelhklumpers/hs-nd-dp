@@ -39,6 +39,8 @@ import Control.Monad
 import ListT
 import Control.Monad.State
 import Debug.Trace
+import Data.Semigroup
+import Data.Foldable
 
 
 boundedEnum :: (Enum a, Bounded a) => [a]
@@ -192,6 +194,11 @@ upgradeToCost u n = upgradeBase u * (1 - s ** realToFrac n) / (1 - s)
     where
     s = upgradeScale u
 
+upgradeCostFromTo :: (Real a, Floating b) => Upgrade -> a -> a -> b
+upgradeCostFromTo u n m = upgradeBase u * (s ** realToFrac m - s ** realToFrac n) / (s - 1)
+    where
+    s = upgradeScale u
+
 
 data Spec = Spec { specCellType :: Cell, specCells :: Int
                  , specGenType :: Gen, specGens :: Int
@@ -250,7 +257,10 @@ buildCostTo :: (Real a, Floating b) => Build' a -> b
 buildCostTo = sum . fmap (uncurry upgradeToCost) . M.toList . runBuild
 
 buildCostFromTo :: (Real a, Floating b) => Build' a -> Build' a -> b
-buildCostFromTo bx by = buildCostTo (Build $ M.unionWith max (runBuild bx) (runBuild by)) - buildCostTo bx
+buildCostFromTo old upd = sum $ M.mapWithKey (uncurry . upgradeCostFromTo)  $ M.intersectionWith (,) (runBuild old) new
+    where
+    new = M.unionWith max (runBuild old) (runBuild upd)
+    --buildCostTo (Build $ ) - buildCostTo bx
 
 type Build = Build' Level
 
@@ -294,7 +304,15 @@ plantBuyCost p = case p of
     _ -> 1e100
 
 
-newtype Game = Game { gamePlant :: M.Map Plants Plant }
+data Game = Game
+    { gamePlant :: M.Map Plants Plant
+    , gameClock :: Float
+    , gameCurrentResearch :: Float
+    , gameResearchL :: M.Map Plants Int
+    , gameResearch :: [Research] }
+
+instance Show Game where
+    show g = printf "t = % 6.2f ..." (gameClock g)
 
 gamePower :: Game -> Float
 gamePower g = sum $ fmap plantHeat $ M.elems $ gamePlant g
@@ -315,14 +333,67 @@ tps = 5
 
 data Research = RProtactium | RCirc deriving (Eq, Ord, Show)
 
+-- TODO research prereqs
+-- researching something that has a prereq you don't have either?
+-- tally up their costs, and notify that you're getting two researches
+
+researchPrereq :: Research -> [Research]
+researchPrereq = \case
+    RProtactium -> [RCirc] -- TODO hack to avoid double research tehe
+    RCirc       -> [RProtactium]
+
+researchCost :: [Research] -> Research -> (Float, [Research])
+researchCost xs r = (sum $ researchCost' <$> r:ys, r:ys)
+    where
+    ys = [y | y <- researchPrereq r, y `notElem` xs]
+
+researchCost' :: Research -> Float
+researchCost' = \case
+    RProtactium -> 2.5e15
+    RCirc -> 1.25e15
+
+plantTiles :: Plants -> Int
+plantTiles = \case
+    Island -> 35
+    Village -> 92
+    Region -> 142
+    City -> 279
+    Metro -> 375
+    Mainland -> 410
+    Continent -> 450
+    _ -> 0
+
+researchTiles :: Game -> M.Map Plants Int
+researchTiles = M.mapWithKey (\ k _ -> plantTiles k) . gamePlant
+
+researchCorrection :: Game -> (Float, Float, M.Map Plants Int)
+researchCorrection g = (rb', cb', floor <$> ds)
+    where
+    ts = M.filter (>0) $ fmap fromIntegral (researchTiles g) :: M.Map Plants Float
+
+    cs = 1.78
+    rs = 1.25
+    w = 1 / log (cs / rs)
+
+    t0 = minimum ts
+
+    ds = (* w) . log . (/t0) <$> ts
+
+    cb' = sum $ (1.78 **) <$> ds
+    rb' = sum $ M.intersectionWith (*) ts $ (1.25 **) <$> ds
+
+
+
+{-
 plantPrereqs :: Plant -> [Research]
 plantPrereqs (Plant b s n) = buildPrereqs b ++ specPrereqs s
 
-specPrereqs :: Spec -> [Research]
-specPrereqs s = [RCirc | specCirc s] ++ [RProtactium | specCellType s == Protactium]
-
 buildPrereqs :: Build -> [Research]
 buildPrereqs _ = []
+-}
+
+specPrereqs :: Spec -> [Research]
+specPrereqs s = [RCirc | specCirc s] ++ [RProtactium | specCellType s == Protactium]
 
 takeWhileT :: (Monad m) => (a -> Bool) -> ListT m a -> ListT m a
 takeWhileT f t = do
@@ -334,101 +405,262 @@ takeWhileT f t = do
             else
             mempty
 
-{-
-researchBest' :: [Research] -> Specs -> ListT (State Game) (Game, Either (UpgradeStats, Plants, Plant) (Research, Level))
-researchBest' block s = do
-    g <- get
+data ResearchStats = ResearchStats { researchLevels :: M.Map Plants Int, researchTime :: Float, researchBuildTime :: Float, researcWaitTime :: Float, researchBuildCost :: Float, researchResearch :: [Research] }
 
-    -- 1. Find the best upgrade
-    let o@(_, pn, p') = gameBest s g block
-    let g' = Game $ M.insert pn p' $ gamePlant g
-
-    -- 2. Does this upgrade use research we don't have yet?
-    case dropWhile (`elem` gameResearch g) $ plantPrereqs p' of
-        []         -> do
-            -- 3. If not, yield the upgrade and update the state to after applying the upgrade
-            put g'
-            cons (g, Left o) $ researchBest' block s
-        (prereq:_) -> do
-            -- 4. 
-            let (Just (_, f), gUp) = flip runState g $ ListT.head $ researchBest' (prereq:block) s
-            let (_, pnUp, pUp) = either id (error "not implemented: double research") f
-
-            -- check what happens if you research first
-            let (lks', gRLk) = flip runState g' $ ListT.toList $ takeWhileT (either (\ (_, _, p) -> usesResearch prereq p) (const False) . snd) $ ListT.take 4 $ researchBest' block s
-            let lks = fmap (either id (error "not implemented: double research") . snd) lks'
-
-            -- patch the result of researching first onto upgrading first
-            -- and vice versa
-            -- compare time taken
-
-            -- NB: not handled: grouping researches
-            let rT = fastResearch g prereq
-            let upRT = fastResearch gUp prereq
-
-            let rLksUp = flip runState gRLk $ applyUpgrade pnUp pUp
-            let upRLks = flip runState gUp $ forM_ lks $ \ (_, pn, p) -> applyUpgrade pn p
-
-            undefined
-
-gameResearch :: Game -> [Research]
-gameResearch = _
-
-researchBest :: Specs -> ListT (State Game) (Game, Either (UpgradeStats, Plants, Plant) (Research, Level))
-researchBest = researchBest' []
--}
-
-data ResearchStats = ResearchStats {  }
+instance Show ResearchStats where
+    show (ResearchStats l t tb tw bc dr) = printf "Research: % 6.2f = % 6.2f + % 6.2f, for % 6.2e, %s, %s" t tb tw bc (show dr) (show l)
 
 fastResearch :: Game -> Research -> ResearchStats
-fastResearch = undefined
+fastResearch g r = ResearchStats levels (build + wait) build wait cost dr
+    where
+    p = gamePower g
+    (c', dr) = researchCost (gameResearch g) r
+    c = c' - gameCurrentResearch g
 
-usesResearch :: Research -> Plant -> Bool
-usesResearch r p = r `elem` plantPrereqs p
+    cs = 1.78
+    rs = 1.25
 
-gameBest :: Specs -> Game -> (UpgradeStats, Plants, Plant)
-gameBest s g = minimum $ gameBest' s g
+    (rb', cb', offsets) = researchCorrection g
 
-gameBest' :: Specs -> Game -> [(UpgradeStats, Plants, Plant)]
-gameBest' specs g = catMaybes $ do
+    cb = 25e3 * cb'
+    rb = 8 * rb'
+
+    a = 1 / rs * cs / (cs - 1)
+    -- TODO Yeah you still have to test the lower and higher int
+    n = round $ logBase (cs * rs) (a * c / rb * p / cb)
+    levels = (+ n) <$> offsets
+
+    --dlevels = M.unionWith (-) levels (gameResearchL g)
+    tiles = fromIntegral <$> researchTiles g
+
+    cost  = 25e3 * sum (max 0 <$> M.unionWith (-) ((cs ^) <$> levels) ((cs ^) <$> gameResearchL g))
+    speed = 8 * sum (M.intersectionWith (*) tiles $ (rs ^) <$> levels)
+
+
+    build = cost / p / fromIntegral tps / 3600
+    wait  = c / speed / fromIntegral tps / 3600
+
+{-
+fastResearch :: Game -> Research -> ResearchStats
+fastResearch g r = ResearchStats _ _ _ _
+    where
+    n = researchT0 g r
+-}
+
+doResearch' :: Game -> Research -> (ResearchStats, Game)
+doResearch' g = flip runState g . doResearch
+
+doResearch :: MonadState Game m => Research -> m ResearchStats
+doResearch r = do
+    g <- get
+
+    let u = fastResearch g r
+
+    let g' = g {
+        gameResearchL = researchLevels u,
+        gameResearch = researchResearch u ++ gameResearch g,
+        gameClock = researchTime u + gameClock g }
+
+    put g'
+    return u
+
+type Action = Either (UpgradeStats, Plants, Plant) (ResearchStats, Research)
+
+researchBest' :: [Research] -> Int -> Int -> Specs -> ListT (State Game) (Game, Action)
+researchBest' block d lookahead s = do
+    g1 <- get
+
+    -- 1. Find the best upgrade
+    case gameBest block s g1 of
+        -- TODO ah, the most efficient upgrade is not necessarily "the best" for branching your research on. Consider:
+        -- Metro: buy + ret = 40, +10% total income
+        -- SHC: buy + ret = 1, +0% total income
+
+        -- TODO is there a better statistic to target for branching?
+
+        Nothing -> mempty
+        Just (_, pn, p') -> do
+            -- Does this upgrade use research we don't have yet?
+            case dropWhile (`elem` gameResearch g1) $ specPrereqs $ plantSpec p' of
+                [] -> do
+                    -- 2. If not, yield the upgrade and update the state to after applying the upgrade
+                    {- _ <- applyUpgrade pn p'
+                    cons (g1, Left o) $ researchBest' block s -}
+                    applyUpgradeLifted pn p'
+                    <> researchBest' block d lookahead s
+                (prereq:_) -> do
+                    --traceM $ "!" ++ show u
+
+                    let block' = prereq : researchPrereq prereq
+
+                    -- 3.a.1. Restart from 1. but ban @prereq@ 
+                    let (u3a1, g3a1) = flip runState g1 $ ListT.head $ researchBest' (block' ++ block) (d + 1) lookahead s
+                    let (_, pn3a1, p3a1) = either id (error "not implemented: double research") (snd $ fromJust u3a1)
+                    -- TODO instead just keep taking until no research?
+                    -- but then you have to take a couple more to make it fair? hmm
+                    -- but taking more isn't necessarily better if you're blocked on research...
+                    -- I guess you could try to do some "convolution"-esque approach if you're precomputing upgrades...
+
+                    -- 3.a.2. Research @prereq@
+                    let (_, g3a2) = doResearch' g3a1 prereq
+                    --let (ra, g3a2) = doResearch' g3a1 prereq
+
+                    -- 3.b.1. Research @prereq@ from 1. 
+                    let (_, g3b1) = doResearch' g1 prereq
+                    --let (rb, g3b1) = doResearch' g1 prereq
+
+                    --traceM $ "Wait: " ++ show ra
+                    --traceM $ "Research: " ++ show rb
+
+                    -- 3.b.2. Apply the upgrade found in 1. 
+                    let (_, g3b2) = applyUpgrade' g3b1 pn p'
+
+                    -- 3.b.3. Carry on for @lookahead@ more steps
+                    let (u3b3', g3b3) = flip runState g3b2 $ ListT.toList
+                            -- $ takeWhileT (either (\ (_, _, p) -> specUsesResearch (plantSpec p) prereq) (const False) . snd)
+                            -- TODO is this takeWhile necessary here?
+                            -- can we drop it safely? does it not give a better estimate without it?
+
+                            -- A: yes.
+                            $ ListT.take lookahead $ researchBest' block (d + 1) lookahead s
+
+                    let u3b3 = (\ (_, pn, p) -> (pn, p)) . either id (error "not implemented: double research") . snd <$> u3b3'
+
+                    -- 3.b.4. Apply the upgrade found in 3.a.1.
+                    let (_, g3b4) = applyUpgrade' g3b3 pn3a1 p3a1
+
+                    -- 3.a.3. Apply the upgrade found in 1.
+                    let (_, g3a3) = applyUpgrade' g3a2 pn p'
+
+                    -- 3.a.4. Apply the upgrades found in 3.b.3.
+                    let (_, g3a4) = flip runState g3a3 $ forM u3b3 (uncurry applyUpgrade)
+
+                    {-
+                    traceM $ "Depth: " ++ show d
+
+                    traceM $ "Skip: " ++ unlines (show <$> [
+                            g3a1,
+                            g3a2,
+                            g3a3,
+                            g3a4
+                        ])
+                    
+                    traceM $ "Research: " ++ unlines (show <$> [
+                            g3b1,
+                            g3b2,
+                            g3b3,
+                            g3b4
+                        ])
+
+                    traceM $ if gameClock g3a4 < gameClock g3b4 then "Skip" else "Take" 
+                    -}
+
+                    when (d == 0) $ do
+                        let l = gameClock g3a4
+                        let r = gameClock g3b4
+                        traceM $ "D" ++ show d ++ ": " ++ show l ++ (if l < r then " < " else " > ") ++ show r
+
+                    if gameClock g3a4 < gameClock g3b4 then
+                        applyUpgradeLifted pn3a1 p3a1
+                        {- <> doResearchLifted prereq
+                        <> applyUpgradeLifted pn p'
+                        <> Foldable.foldMap (uncurry applyUpgradeLifted) u3b3 -}
+                        <> researchBest' block d lookahead s
+                    else do
+                        doResearchLifted prereq
+                        <> applyUpgradeLifted pn p'
+                        {- <> Foldable.foldMap (uncurry applyUpgradeLifted) u3b3
+                        <> applyUpgradeLifted pn3a1 p3a1 -}
+                        <> researchBest' block d lookahead s
+
+doResearchLifted :: (MonadTrans t, MonadState Game m) => Research -> t m (Game, Action)
+doResearchLifted r = lift $ do
+    g <- get
+    s <- doResearch r
+    return (g, Right (s, r))
+
+applyUpgradeLifted :: (MonadTrans t, MonadState Game m) => Plants -> Plant -> t m (Game, Action)
+applyUpgradeLifted pn p = lift $ do
+    g <- get
+    s <- applyUpgrade pn p
+
+    return (g, Left (s, pn, p))
+
+
+researchBest :: Int -> Specs -> ListT (State Game) (Game, Action)
+researchBest = researchBest' [] 0
+
+{-
+-- this is susceptible to double research
+let (_, pn3a1, p3a1) = gameBest (prereq:block) s g1
+let (_, g3a1) = applyUpgrade' g1 pn3a1 p3a1
+-}
+
+--usesResearch :: Research -> Plant -> Bool
+--usesResearch r p = r `elem` plantPrereqs p
+
+specUsesResearch :: Spec -> Research -> Bool
+specUsesResearch s r = r `elem` specPrereqs s
+
+specUsesAnyResearch :: Foldable t => Spec -> t Research -> Bool
+specUsesAnyResearch s = any (specUsesResearch s)
+
+gameBest :: [Research] -> Specs -> Game -> Maybe (UpgradeStats, Plants, Plant)
+gameBest block s g = minimum' $ gameBest' block s g
+
+gameBest' :: [Research] -> Specs -> Game -> [(UpgradeStats, Plants, Plant)]
+gameBest' block specs g = catMaybes $ do
     pn <- --[Island] 
         boundedEnum :: [Plants]
 
     let (p, acc) = maybe (mempty, plantBuyCost pn) (, 0) (gamePlant g M.!? pn)
-    
-    case plantBest specs g pn p acc of
-        Nothing -> return Nothing
-        Just (u, p') -> return $ Just (u, pn, p')
 
-plantBest :: Specs -> Game -> Plants -> Plant -> Float -> Maybe (UpgradeStats, Plant)
-plantBest specs g pn p acc = case specs M.!? pn of
+    case plantBest block specs g pn p acc of
+        Nothing -> return Nothing
+        Just (u, p') -> do
+            return $ Just (u, pn, p')
+
+plantBest :: [Research] -> Specs -> Game -> Plants -> Plant -> Float -> Maybe (UpgradeStats, Plant)
+plantBest block specs g pn p acc = case specs M.!? pn of
     Nothing -> Nothing
-    Just sns -> Just $ minimum $ do
+    Just sns -> minimum' $ do
         --traceShow pn $ return ()
         let (Plant _ s n) = p
         sn@(s', n') <- sns
+
+        guard (not $ any (specUsesResearch s') block)
         let acc' = max 0 $ fromIntegral n' * specCost s' - fromIntegral n * specCost s
-        let (u, b') = buildBest g p sn (acc' + acc)
 
-        return (u, Plant b' s' n')
+        case buildBest g p sn (acc' + acc) of
+            Nothing -> []
+            Just (u, b') -> do
+                --traceM $ "Prereqs " ++ show (specPrereqs s') ++ ", Block " ++ show block
+                return (u, Plant b' s' n')
 
-buildBest :: Game -> Plant -> (Spec, Int) -> Float -> (UpgradeStats, Build)
+minimum' :: (Foldable t, Ord a) => t a -> Maybe a
+minimum' = fmap getMin . foldMap' (Just . Min)
+
+buildBest :: Game -> Plant -> (Spec, Int) -> Float -> Maybe (UpgradeStats, Build)
 buildBest g p@(Plant b _ _) (s', n') acc = go b
     where
     go b' = case bs' of
-            [] -> (UpgradeStats 0 (1/0) 0 0 0 0, b')
-            bs -> minimum bs
+            [] -> Just (UpgradeStats 0 (1/0) 0 0 0 0, b')
+            bs -> minimum' bs
         where
         bs' = allBuilds g p (Plant b' s' n') acc
 
 upgradeEffect :: (Real a, Real b) => Float -> Plant' a -> Plant' b -> Float -> Float
 upgradeEffect power p q cost = upgradeEff $ mkUpgradeStats power p q cost
 
+applyUpgrade' :: Game -> Plants -> Plant -> (UpgradeStats, Game)
+applyUpgrade' g pn q = flip runState g $ applyUpgrade pn q
+
 applyUpgrade :: (MonadState Game m) => Plants -> Plant -> m UpgradeStats
 applyUpgrade pn q = do
     u <- getUpgradeStats pn q
     g <- get
-    put $ g { gamePlant = M.insert pn q (gamePlant g) } 
+    traceM $ show u ++ " u " ++ show (upgradeBuy u) ++ "g" ++ show (gameClock g)
+    put $ g { gamePlant = M.insert pn q (gamePlant g), gameClock = upgradeBuy u + gameClock g }
     return u
 
 getUpgradeStats :: (MonadState Game m) => Plants -> Plant -> m UpgradeStats
@@ -464,40 +696,52 @@ roundBuild (Build b) = Build $ M.mapWithKey go b
     go _ = ceiling
 
 
+-- TODO can we prune more builds with a lower bound on the cost for a given heat?
+-- TODO can we ``defunctionalize'' this? I.e., right now we have essentially eta : Game -> Build -> Build -> Float
+-- and we want to know whether eta g b b1 < eta g b b2.
+-- Can we change this to eta' : Build -> X and eta'' : X -> Game -> Build -> Float for some concrete X?
+-- and then hopefully from X extract conditions when x1 < x2.
 allBuilds :: Game -> Plant -> Plant -> Float -> [(UpgradeStats, Build)]
 allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = flip evalState (1/0) $ toReverseList $ do
-    let (Spec cT _ _ _ _ _ iN ciN) = s' 
+    let (Spec cT _ _ _ _ _ iN ciN) = s'
 
     let lowerB = M.unionWith max (runBuild b) (runBuild b')
     let gmwL0 = max 30 $ M.findWithDefault 0 GenMaxWater lowerB
-    let geL0 = max 60 $ M.findWithDefault 0 GenEff lowerB
     let ciL0 = M.findWithDefault 0 CircMult lowerB
+    --let geL0 = max 60 $ M.findWithDefault 0 GenEff lowerB
+    let clL0 = M.findWithDefault 0 (CellLife cT) lowerB
 
     let lowerH = plantNetHeat p :: Float
     let pPH = gamePowerH g
-    
-    ciL <- fromFoldable $ if ciN then [ciL0 - 1..20] else [0]
-    let cCI = upgradeToCost CircMult ciL / pPH
-    upperT <- lift get
-    guard (cCI < upperT) 
 
     iL <- fromFoldable $ if iN > 0 then [0..20] else [0]
-    let cI = cCI + upgradeToCost IsoMult iL / pPH
+    let t0 = upgradeToCost IsoMult iL / pPH
+
     upperT <- lift get
-    --traceShow (cI, upperT) $ return ()
-    guard (cI < upperT) 
+    guard (t0 < upperT)
 
     cL <- fromFoldable [0..20]
-    let cC = cI + upgradeToCost (CellHeat cT) cL / pPH
-    upperT <- lift get
-    --traceShow (cC, upperT) $ return ()
-    guard (cC < upperT) 
+    let t1 = t0 + upgradeToCost (CellHeat cT) cL / pPH
+    let hI = fromIntegral (n' * specCells s') * isoMult (specIsos s') iL  * cellHeat cT cL :: Float
+    guard (hI > lowerH)
 
-    gmwL <- fromFoldable [gmwL0 - 1..80]
-    let cGMW = cC + upgradeToCost GenMaxWater gmwL / pPH
     upperT <- lift get
-    --traceShow (cGMW, upperT) $ return ()
-    guard (cGMW < upperT) 
+    guard (t1 < upperT)
+
+    ciL <- fromFoldable $ if ciN then [max 0 (ciL0 - 1)..20] else [0]
+    let t2 = t1 + upgradeToCost CircMult ciL / pPH
+    upperT <- lift get
+    guard (t2 < upperT)
+
+    gmwL <- fromFoldable [max 0 (gmwL0 - 1)..80]
+    let t3 = t2 + upgradeToCost GenMaxWater gmwL / pPH
+    upperT <- lift get
+    guard (t3 < upperT)
+
+    clL <- fromFoldable [clL0 .. 3]
+    let t4 = t3 + upgradeToCost (CellLife cT) clL / pPH
+    upperT <- lift get
+    guard (t4 < upperT)
 
 {-
     geL <- fromFoldable [geL0 - 1..90]
@@ -509,14 +753,16 @@ allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = flip evalState (1/0) $ toReve
 
     let b'' = roundBuild $ autoFillBuild' s' $ Build $ fmap fromIntegral $ lowerB
             & M.insert (CellHeat cT) cL
-            & M.insert IsoMult iL
+            & (if iL > 0 then M.insert IsoMult iL else id)
             & M.insert GenMaxWater gmwL
 --            & M.insert GenEff geL
-            & M.insert CircMult ciL
+            & (if ciL > 0 then M.insert CircMult ciL else id)
+            & (if clL > 0 then M.insert (CellLife cT) clL else id)
 
     let q = Plant b'' s' n'
 
-    guard (plantNetHeat q > lowerH) 
+    --let x = buildCostFromTo b b''
+    --when (x < 0) $ traceShow (b, b'', s, s') $ return ()
 
     let cost = acc + buildCostFromTo b b''
     let e = mkUpgradeStats (gamePower g) p q cost

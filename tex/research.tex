@@ -1,0 +1,134 @@
+
+\documentclass{article}
+
+\usepackage{amsmath}
+
+\begin{document}
+\begin{itemize}
+    \item Money: $m : T \to M$
+    \item Power: $P : M$
+\end{itemize}
+
+
+\[ T = T_0 + T_1 \]
+\[ T_1 = C / R(T_0) \]
+
+\[ R(T_0) = f(r(m(T_0) + c(r_0))) \]
+
+\[ f(n) = f_b * f_e^n \]
+\[ f_b = f_b, f_e = 1.25 \]
+
+\[ r(x) = s^{-1}(x) \]
+
+
+\[ m(t) = Pt \]
+
+\[ s(n) = \sum_{i = 0}^{n - 1} c(i) \]
+\[ s(n) = c_b \frac{1 - c_e^n}{1 - c_e} \]
+
+\[ c(n) = c_e^n * c_b \] 
+\[ c_e = 1.78, c_b = 25e3 \]
+
+\[ s(r(x)) = x \]
+\[ c_b \frac{1 - c_e^{r(x)}}{1 - c_e} = x \]
+\[ c_e^{r(x)} - 1 = x\frac{c_e - 1}{c_b} \]
+\[ c_e^{r(x)} = 1 + x\frac{c_e - 1}{c_b} \]
+\[ r(x) = \log_{c_e}(1 + x\frac{c_e - 1}{c_b}) \]
+
+\[ f(r(x)) = f_b * f_e^{\log_{c_e}(1 + x\frac{c_e - 1}{c_b})} \]
+\[ f(r(x)) = f_b * (1 + x\frac{c_e - 1}{c_b})^{\log{c_e}{f_e}} \]
+\[ k = \log_{c_e}{f_e} \]
+\[ f(r(x)) = f_b * (1 + x\frac{c_e - 1}{c_b})^k \]
+
+\[ R(T_0) = f_b * (1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})^k \]
+
+
+\[ T' = 0 \]
+\[ T_1' = -1 \]
+\[ C (1 / R(T_0))' = -1 \]
+\[ \frac{C}{f_b} ((1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})^{-k})' = -1 \]
+\[ ((1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})^{-k})' = -\frac{f_b}{C} \]
+\[ k(1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})^{-k-1}(1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})' = \frac{f_b}{C} \]
+\[ m'(T_0)\frac{c_e - 1}{c_b} = \frac{f_b}{Ck} (1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})^{k+1} \]
+\[ P\frac{c_e - 1}{c_b} = \frac{f_b}{Ck} (1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})^{k+1} \]
+\[ \frac{PCk}{f_b}\frac{c_e - 1}{c_b} = (1 + (m(T_0) + c(r_0))\frac{c_e - 1}{c_b})^{k+1} \]
+\[ \left(\frac{PCk}{f_b}\frac{c_e - 1}{c_b}\right)^{\frac{1}{k + 1}} - 1 = (m(T_0) + c(r_0))\frac{c_e - 1}{c_b} \]
+\[ \left(\left(\frac{PCk}{f_b}\frac{c_e - 1}{c_b}\right)^{\frac{1}{k + 1}} - 1\right)\frac{c_b}{c_e - 1} = m(T_0) + c(r_0) \]
+\[ \left(\left(\frac{PCk}{f_b}\frac{c_e - 1}{c_b}\right)^{\frac{1}{k + 1}} - 1\right)\frac{c_b}{c_e - 1} - c(r_0) = PT_0 \]
+
+\newpage
+\section{Redo}
+Total time:
+\[ T(n, r_0) = T_0(n, r_0) + T_1(n) \]
+where
+\begin{align*}
+    T_0 &= \frac{s(n) - s(r_0)}{P} \\
+    T_1 &= \frac{C}{r(n)} 
+\end{align*}
+
+With cost:
+\[ c(n) = c_b c_s^n \]
+The cumulative cost is:
+\begin{align*}
+    s(n) &= \sum_{i = 0}^{n - 1} c(i) \\
+    &= c_b \frac{c_s^n - 1}{c_s - 1} \\
+    s(n) - s(r_0) &= c_b\frac{c_s^n - c_s^{r_0}}{c_s - 1}
+\end{align*}
+
+The research speed is:
+\[ r(n) = r_b r_s^n \]
+
+In total:
+\begin{align*}
+    T(n, r_0) &= \frac{s(n) - s(r_0)}{P} + \frac{C}{r(n)} \\
+    &= \frac{c_b}{P}\frac{c_s^n - c_s^{r_0}}{c_s - 1} + r_s^{-n} \frac{C}{r_b}
+\end{align*}
+
+Deriving w.r.t. $n$
+\begin{align*}
+    d/dn\ T(n,r_0) &= 0 \\
+    n\frac{c_b}{P}\frac{c_s^{n - 1}}{c_s - 1} &= n r_s^{-n - 1} \frac{C}{r_b} \\
+    \frac{c_b}{P}\frac{c_s^{n - 1}}{c_s - 1} &= r_s^{-n - 1} \frac{C}{r_b} \\
+    (c_s r_s)^{n} &= \frac{c_s}{r_s} \frac{1}{c_s - 1} \frac{C}{r_b}\frac{P}{c_b} \\
+    n &= \log_{c_s r_s} \frac{1}{r_s} \frac{c_s}{c_s - 1} \frac{C}{r_b}\frac{P}{c_b} \\
+    n &= \frac{\log r_s^{-1}}{\log r_s + \log c_s} + \log_{c_s r_s} \frac{c_s}{c_s - 1} \frac{C}{r_b}\frac{P}{c_b} \\
+    n &= -\frac{\log r_s}{\log r_s + \log c_s} + \frac{\log c_s}{\log r_s + \log c_s} + \log_{c_s r_s} \frac{1}{c_s - 1} \frac{C}{r_b}\frac{P}{c_b} \\
+    n &= \frac{\log c_s - \log r_s}{\log r_s + \log c_s} + \log_{c_s r_s} \frac{1}{c_s - 1} \frac{C}{r_b}\frac{P}{c_b}
+\end{align*}
+
+
+
+\subsection{Offsets}
+We have
+\[ R = r_b \sum_{i = 0}^k t_i r_s^{n_i} \]
+\[ C = c_b \sum_{i = 0}^k \frac{c_s^{n_i} - 1}{c_s - 1} \]
+so we want to maximize $R$ for a fixed $C$.
+
+Equivalent is
+\[ \max \sum_{i = 0} t_i r_s^{n_i} \]
+subject to
+\[ C' = \sum_{i = 0} c_s^{n_i} \]
+
+For a pair
+\[ t_0 b^n + t_1 b^m \]
+\[ c^n + c^m = C \]
+
+\[ t_0 b^n \log b + t_1 b^m m' \log b = 0 \]
+\[ t_0 b^n + t_1 b^m m' = 0 \]
+
+\[ m = \log_c (C - c^n) \]
+\[ m' = - \frac{c^n}{C - c^n} \]
+
+
+\[ t_0 b^n = t_1 b^{\log_c (C + c^n)} \frac{c^n}{C - c^n} \]
+\[ t_0 c^{n \log_c b} = t_1 (C + c^n)^{\log_c b} \frac{c^n}{C - c^n} \]
+
+
+\subsection{Easier argument for offsets}
+From $(n_i)_{i = 0}^k$, it holds that $\frac{t_i (r_s - 1) r_s^{n_i}}{c_s^{n_i}}$ are equal for all $i$,
+otherwise, exchange.
+
+For a pair $t_0 (r_s/c_s)^{n_0} = t_1 (r_s/c_s)^{n_1}$,
+\[ n_1 - n_0 = \log(t_0/t_1) / \log(r_s/c_s) \]
+\[ n_1 - n_0 = \log(t_1/t_0) / \log(c_s/r_s) \]
+\end{document}

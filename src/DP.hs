@@ -28,6 +28,7 @@ module DP (
     DPProblem(..),
     DDPProblem(..),
     enumSearch,
+    goldenSectionSearch,
     uniSearch,
     execDP,
     reducedP,

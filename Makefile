@@ -39,3 +39,6 @@ profileall: profile displayflame move
 show:
 	"mnt/c/Program Files/Mozilla Firefox/firefox.exe" blackjack-exe.prof.svg
 	"mnt/c/Program Files/Mozilla Firefox/firefox.exe" blackjack-exe.alloc.prof.svg
+
+debug:
+	stack run --profile -- +RTS -xc
