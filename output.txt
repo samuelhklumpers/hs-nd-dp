@@ -1,0 +1,34 @@
+Power:
+Island    (   0.0%): power/t =  2.64e10 ( 2.54e10), power/h =  4.57e14, bat =  4.57e15
+Village   (   0.0%): power/t =  2.05e11 ( 1.99e11), power/h =  3.59e15, bat =  3.59e16
+Region    (   2.2%): power/t =  1.09e13 ( 1.05e13), power/h =  1.90e17, bat =  1.90e18
+City      (  14.8%): power/t =  7.09e13 ( 7.04e13), power/h =  1.27e18, bat =  1.27e19
+SHC       (   0.5%): power/t =  2.43e12 ( 2.39e12), power/h =  4.30e16, bat =  4.30e17
+Metro     (  44.2%): power/t =  2.11e14 ( 2.10e14), power/h =  3.78e18, bat =  3.78e19
+FHC       (   0.5%): power/t =  2.57e12 ( 2.53e12), power/h =  4.55e16, bat =  4.55e17
+Mainland  (  37.7%): power/t =  1.80e14 ( 1.79e14), power/h =  3.22e18, bat =  3.22e19
+Total: power/t =  4.78e14 ( 4.75e14), power/h =  8.56e18, bat =  8.56e19
+
+Upgrades:
+D0: 25.508028 < 25.514008
+t =   0.00 , FHC       :  19.45 =   0.01 +  19.44 -> + 1.43e11 (  5.65%) for  5.01e16, ThoriumGen3 1:44:64:4 -> ThoriumGen3 1:50:100:4   , I12->13
+D0: 25.757738 > 25.749794
+(t =   0.01 ...,Research:  24.57 =   4.28 +  20.29, for  3.68e19, [RCirc,RProtactium], fromList [(Island,56),(Village,58),(Region,59),(City,61),(Metro,62),(Mainland,62)],RCirc)
+t =  24.57 , Metro     :   4.34 =   0.17 +   4.17 -> + 1.93e13 (  9.19%) for  1.45e18, ThoriumGen4 1:4:8:2 -> ProtactiumGen4 1:2:12:2C   , H0->2 L0->2 I15->1 C0->5
+t =  24.74 , Metro     :   0.11 =   0.00 +   0.11 -> + 2.11e13 (  9.19%) for  4.08e16, ProtactiumGen4 1:2:12:2C                          , I1->2 C5->6
+t =  24.75 , SHC       :  15.15 =   0.40 +  14.75 -> + 1.47e13 ( 616.42%) for  3.91e18, ThoriumGen3 1:50:64P:4 -> ProtactiumGen4 1:50:100:4, H0->1 L0->1 GE82->83 GMW46->48 P0->22 I11->3
+t =  25.15 , FHC       :  20.66 =   0.36 +  20.30 -> + 9.93e12 ( 371.39%) for  3.63e18, ThoriumGen3 1:50:100:4 -> ProtactiumGen4 1:40:120:4, H0->1 L0->1 GMW47->48 WEMW21->23 P20->21 I13->1
+t =  25.51 , FHC       :  28.93 =   0.20 +  28.72 -> + 4.05e12 ( 32.14%) for  2.09e18, ProtactiumGen4 1:40:120:4 -> ProtactiumGen4 1:50:100:4, H1->0 WEMW23->24 P21->22 I1->5
+t =  25.71 , SHC       :  32.33 =   0.57 +  31.76 -> + 1.04e13 ( 60.53%) for  5.92e18, ProtactiumGen4 1:50:100:4                         , H1->0 GMW48->50 WEMW24->25 P22->23 I3->11
+t =  26.28 , FHC       :  37.08 =   0.56 +  36.52 -> + 9.00e12 ( 54.05%) for  5.92e18, ProtactiumGen4 1:50:100:4                         , GMW48->50 WEMW24->25 P22->23 I5->10
+t =  26.84 , Mainland  :  44.93 =   0.04 +  44.89 -> + 4.95e11 (  0.28%) for  4.00e17, ThoriumGen4 1:4:8:2                               , L1->2
+t =  26.88 , FHC       :  48.58 =   2.07 +  46.51 -> + 2.65e13 ( 103.51%) for  2.22e19, ProtactiumGen4 1:50:100:4 -> ProtactiumGen4 1:8:24:4C, GMW50->49 WEMW25->27 P23->25 I10->3 C0->10
+t =  28.95 , Mainland  :  49.70 =   5.02 +  44.68 -> + 7.10e13 ( 39.54%) for  5.71e19, ThoriumGen4 1:4:8:2 -> ProtactiumGen4 1:4:12:1C   , H0->2 L0->2 GMW56->55 WEMW28->29 P26->27 I13->5 C0->3
+t =  33.97 , Metro     :  54.48 =   8.32 +  46.16 -> + 1.31e14 ( 52.19%) for  1.09e20, ProtactiumGen4 1:2:12:2C                          , H2->1 WEMW29->30 P27->28 I2->13 C6->12
+t =  42.29 , FHC       :  58.73 =   1.91 +  56.82 -> + 2.88e13 ( 55.17%) for  2.95e19, ProtactiumGen4 1:8:24:4C                          , GMW49->51 WEMW27->28 P25->26 I3->7 C10->9
+t =  44.20 , Mainland  :  63.31 =   7.39 +  55.93 -> + 1.17e14 ( 46.67%) for  1.18e20, ProtactiumGen4 1:4:12:1C -> ProtactiumGen4 1:2:8:2C, GMW55->56 WEMW29->30 P27->28 I5->2 C3->9
+t =  51.58 , SHC       :  65.07 =   0.34 +  64.72 -> + 5.40e12 ( 19.67%) for  6.29e18, ProtactiumGen4 1:50:100:4 -> ProtactiumGen4 1:40:120:4, GMW50->52 I11->14
+t =  51.93 , City      :  69.18 =   0.63 +  68.55 -> + 9.39e12 ( 13.35%) for  1.16e19, ThoriumGen4 1:4:8:2 -> ThoriumGen4 1:2:6:1        , L1->2 GE87->88 GMW54->55
+t =  52.56 , FHC       :  69.24 =   3.24 +  66.00 -> + 5.04e13 ( 62.22%) for  5.99e19, ProtactiumGen4 1:8:24:4C                          , GMW51->53 WEMW28->29 P26->27 I7->14
+t =  55.80 , Mainland  :  75.93 =  10.76 +  65.16 -> + 1.78e14 ( 48.46%) for  2.09e20, ProtactiumGen4 1:2:8:2C -> ProtactiumGen4 1:2:6:1C, WEMW30->31 P28->29 I2->8 C9->11
+t =  66.56 , City      :  77.29 =   8.02 +  69.26 -> + 1.47e14 ( 184.12%) for  1.83e20, ThoriumGen4 1:2:6:1 -> ProtactiumGen4 1:2:6:1C    , L0->2 GMW55->54 WEMW27->30 P25->28 I14->9 C0->12

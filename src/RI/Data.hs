@@ -1,4 +1,4 @@
-module RI.Data ( module RI.Data ) where
+module RI.Data ( main ) where
 
 import RI.ReactorIdle
 import qualified Data.Map as M
@@ -328,16 +328,23 @@ game = Game {
         (FHC, plantFHC),
         (Mainland, plantMainland)],
     gameClock = 0,
-    gameCurrentResearch = 226e12,
+    gameCurrentResearch = 200e12,
     gameResearchL = M.fromList [
-        (Island, 53),
-        (Village, 56),
-        (Region, 55),
-        (City, 58),
-        (Metro, 60),
-        (Mainland, 57)],
-    gameResearch = []
+        (Island, 56),
+        (Village, 58),
+        (Region, 59),
+        (City, 61),
+        (Metro, 61),
+        (Mainland, 62)],
+    gameResearch = [RProtactium]
 }
+
+enable :: [Plants]
+enable = [SHC, FHC]
+
+enabledSpecs :: M.Map Plants [(Spec, Int)]
+enabledSpecs = M.filterWithKey (\ k _ -> k `elem` enable) specs 
+
 
 
 main :: IO ()
@@ -347,7 +354,7 @@ main = do
     putStrLn ""
 
     putStrLn "Upgrades:"
-    let steps' = hoist (hoist generalize) $ ListT.take 20 $ researchBest 4 specs
+    let steps' = hoist (hoist generalize) $ ListT.take 20 $ researchBest 4 enabledSpecs
 
     _ <- flip runStateT game $ flip ListT.traverse_ steps' $ \ (g, a) -> do
         case a of
@@ -450,54 +457,9 @@ showSteps = do
     _ <- runStateT (stepsGame 20) game
     return ()
 
-
 {-
-
-
-
-showBest :: IO ()
-showBest = do
-    best <- bestUpgrades game
-    forM_ best $ \ (stats, pn, p') -> do
-        let p = gamePlant game M.!? pn
-        formatUpgrade p p' pn stats
-
-{-
-stepGame :: StateT Game IO (Game, UpgradeStats, Plants, Plant, Plant)
-stepGame = do
-    g <- get
-
-    nu <- lift $ bestUpgrades g
-    let (stats, pn, p') = head nu
-    let p = runGame g M.! pn
-
-    let g' = Game $ M.insert pn p' $ runGame g
-
-    put g'
-    return (g', stats, pn, p, p')
--}
-
-
-{-
-showSteps :: IO ()
-showSteps = do
-    (xs, _) <- runStateT (stepsGame 10) game
-    forM_ xs $ \ (_, u, pn, p, p') -> do
-        formatUpgrade p p' pn u
--}
--}
-{-
--- when plantBuild plantMetro M.! CellHeat Thorium == 4., start researching for Gen4
-
--- TODO directly search for the best efficiency
--- -> from the current build exhaustively search + branch&bound
-
--- TODO research
--- -> if a local search hits an unresearched item, branch, and push the research to the queue
--- -> generate sequences of upgrades with R+ and without the research R-
--- -> check if T(R+; R- `union` R+) < T(R-; R- `union` R+)
+-- when plantBuild plantMetro M.! (CellHeat Thorium) == 4., start researching for Gen4
+-- when plantBuild plantMainland M.! (CellHeat Thorium) ==  14, start researching Protactium (or perhaps earlier)
 
 -- TODO unfold a big upgrade into viable sub-upgrades
-
--- DEFER speed up completeBuild by using gradient descent
 -}
