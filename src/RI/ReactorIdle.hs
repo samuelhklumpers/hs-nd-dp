@@ -70,21 +70,21 @@ cellHeatCostBase c = case c of
     Thermo  -> 100e9
     Fusion  -> 100e12
     Thorium -> 10e15
-    Protactium -> 10e18 -- ?
+    Protactium -> 1e18
 
 cellLifeCostBase :: Fractional a => Cell -> a
 cellLifeCostBase c = case c of
     Thermo  -> 500e9
     Fusion  -> 500e12
     Thorium -> 50e15
-    Protactium -> 50e18 -- ?
+    Protactium -> 5e18
 
 cellCost :: Fractional a => Cell -> a
 cellCost c = case c of
     Thermo  -> 20e9
     Fusion  -> 800e9
     Thorium -> 72e12
-    Protactium -> 5.04e15 -- ?
+    Protactium -> 5.04e15
 
 
 data Gen = Gen2 | Gen3 | Gen4 | Gen5
@@ -160,7 +160,7 @@ upgradeScale u = case u of
     ElemMaxWater    -> 2
     PumpWater p     -> if p == Pump then 1.98 else 2
     IsoMult         -> 10
-    CircMult        -> 2.1 -- ?
+    CircMult        -> 2.1
 
 upgradeBase :: Fractional a => Upgrade -> a
 upgradeBase u = case u of
@@ -172,7 +172,7 @@ upgradeBase u = case u of
     ElemMaxWater    -> 30e9
     PumpWater p     -> if p == Pump then 80e9 else 640e9
     IsoMult         -> 50e3
-    CircMult        -> 1e15 -- ?
+    CircMult        -> 1e18
 
 upgradeShortName :: Upgrade -> String
 upgradeShortName u = case u of
@@ -257,7 +257,7 @@ buildCostTo :: (Real a, Floating b) => Build' a -> b
 buildCostTo = sum . fmap (uncurry upgradeToCost) . M.toList . runBuild
 
 buildCostFromTo :: (Real a, Floating b) => Build' a -> Build' a -> b
-buildCostFromTo old upd = sum $ M.mapWithKey (uncurry . upgradeCostFromTo)  $ M.intersectionWith (,) (runBuild old) new
+buildCostFromTo old upd = sum $ M.mapWithKey (uncurry . upgradeCostFromTo)  $ M.unionWith (\ (a, b) (c, d) -> (max a c, max b d)) ((,0) <$> runBuild old) ((0,) <$> new)
     where
     new = M.unionWith max (runBuild old) (runBuild upd)
     --buildCostTo (Build $ ) - buildCostTo bx
@@ -301,6 +301,8 @@ data Plants = Island | Village | Region | City | SHC | Metro | FHC | Mainland | 
 plantBuyCost :: Plants -> Float
 plantBuyCost p = case p of
     Mainland -> 30e18
+    EHC -> 750e18
+    Continent -> 21e21
     _ -> 1e100
 
 
@@ -333,14 +335,11 @@ tps = 5
 
 data Research = RProtactium | RCirc deriving (Eq, Ord, Show)
 
--- TODO research prereqs
--- researching something that has a prereq you don't have either?
--- tally up their costs, and notify that you're getting two researches
-
 researchPrereq :: Research -> [Research]
 researchPrereq = \case
-    RProtactium -> [RCirc] -- TODO hack to avoid double research tehe
+    -- RProtactium -> [RCirc] -- TODO hack to avoid double research tehe
     RCirc       -> [RProtactium]
+    _ -> []
 
 researchCost :: [Research] -> Research -> (Float, [Research])
 researchCost xs r = (sum $ researchCost' <$> r:ys, r:ys)
@@ -428,7 +427,7 @@ fastResearch g r = ResearchStats levels (build + wait) build wait cost dr
     a = 1 / rs * cs / (cs - 1)
     -- TODO Yeah you still have to test the lower and higher int
     n = round $ logBase (cs * rs) (a * c / rb * p / cb)
-    levels = (+ n) <$> offsets
+    levels = M.unionWith max ((+ n) <$> offsets) (gameResearchL g)
 
     --dlevels = M.unionWith (-) levels (gameResearchL g)
     tiles = fromIntegral <$> researchTiles g
