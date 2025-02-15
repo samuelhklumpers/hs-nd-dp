@@ -330,14 +330,13 @@ instance Show UpgradeStats where
 
 type Specs = M.Map Plants [(Spec, Int)]
 
-tps :: Int
-tps = 5
 
-data Research = RProtactium | RCirc deriving (Eq, Ord, Show)
+data Research = RProtactium | RCirc | RChrono4 deriving (Eq, Ord, Show)
 
 researchPrereq :: Research -> [Research]
 researchPrereq = \case
     -- RProtactium -> [RCirc] -- TODO hack to avoid double research tehe
+    RChrono4    -> [RProtactium]
     RCirc       -> [RProtactium]
     _ -> []
 
@@ -350,6 +349,7 @@ researchCost' :: Research -> Float
 researchCost' = \case
     RProtactium -> 2.5e15
     RCirc -> 1.25e15
+    RChrono4 -> 10e15
 
 plantTiles :: Plants -> Int
 plantTiles = \case
@@ -436,8 +436,11 @@ fastResearch g r = ResearchStats levels (build + wait) build wait cost dr
     speed = 8 * sum (M.intersectionWith (*) tiles $ (rs ^) <$> levels)
 
 
-    build = cost / p / fromIntegral tps / 3600
-    wait  = c / speed / fromIntegral tps / 3600
+    build = cost / p / fromIntegral (gameTps g) / 3600
+    wait  = c / speed / fromIntegral (gameTps g) / 3600
+
+gameTps :: Game -> Int
+gameTps g = if RChrono4 `elem` gameResearch g then 6 else 5
 
 {-
 fastResearch :: Game -> Research -> ResearchStats
@@ -488,8 +491,6 @@ researchBest' block d lookahead s = do
                     applyUpgradeLifted pn p'
                     <> researchBest' block d lookahead s
                 (prereq:_) -> do
-                    --traceM $ "!" ++ show u
-
                     let block' = prereq : researchPrereq prereq
 
                     -- 3.a.1. Restart from 1. but ban @prereq@ 
@@ -534,25 +535,6 @@ researchBest' block d lookahead s = do
                     -- 3.a.4. Apply the upgrades found in 3.b.3.
                     let (_, g3a4) = flip runState g3a3 $ forM u3b3 (uncurry applyUpgrade)
 
-                    {-
-                    traceM $ "Depth: " ++ show d
-
-                    traceM $ "Skip: " ++ unlines (show <$> [
-                            g3a1,
-                            g3a2,
-                            g3a3,
-                            g3a4
-                        ])
-                    
-                    traceM $ "Research: " ++ unlines (show <$> [
-                            g3b1,
-                            g3b2,
-                            g3b3,
-                            g3b4
-                        ])
-
-                    traceM $ if gameClock g3a4 < gameClock g3b4 then "Skip" else "Take" 
-                    -}
 
                     when (d == 0) $ do
                         let l = gameClock g3a4
@@ -561,15 +543,10 @@ researchBest' block d lookahead s = do
 
                     if gameClock g3a4 < gameClock g3b4 then
                         applyUpgradeLifted pn3a1 p3a1
-                        {- <> doResearchLifted prereq
-                        <> applyUpgradeLifted pn p'
-                        <> Foldable.foldMap (uncurry applyUpgradeLifted) u3b3 -}
                         <> researchBest' block d lookahead s
                     else do
                         doResearchLifted prereq
                         <> applyUpgradeLifted pn p'
-                        {- <> Foldable.foldMap (uncurry applyUpgradeLifted) u3b3
-                        <> applyUpgradeLifted pn3a1 p3a1 -}
                         <> researchBest' block d lookahead s
 
 doResearchLifted :: (MonadTrans t, MonadState Game m) => Research -> t m (Game, Action)
@@ -648,8 +625,8 @@ buildBest g p@(Plant b _ _) (s', n') acc = go b
         where
         bs' = allBuilds g p (Plant b' s' n') acc
 
-upgradeEffect :: (Real a, Real b) => Float -> Plant' a -> Plant' b -> Float -> Float
-upgradeEffect power p q cost = upgradeEff $ mkUpgradeStats power p q cost
+upgradeEffect :: (Real a, Real b) => Game -> Float -> Plant' a -> Plant' b -> Float -> Float
+upgradeEffect g power p q cost = upgradeEff $ mkUpgradeStats g power p q cost
 
 applyUpgrade' :: Game -> Plants -> Plant -> (UpgradeStats, Game)
 applyUpgrade' g pn q = flip runState g $ applyUpgrade pn q
@@ -668,21 +645,21 @@ getUpgradeStats pn q = do
     return $ getUpgradeStats' g pn q
 
 getUpgradeStats' :: Game -> Plants -> Plant -> UpgradeStats
-getUpgradeStats' g pn q = mkUpgradeStats (gamePower g) p q c
+getUpgradeStats' g pn q = mkUpgradeStats g (gamePower g) p q c
     where
     p' = gamePlant g M.!? pn
     p = fromMaybe mempty p'
     c = plantCostFromTo p q + maybe (plantBuyCost pn) (const 0) p'
 
-mkUpgradeStats :: (Real a, Real b) => Float -> Plant' a -> Plant' b -> Float -> UpgradeStats
-mkUpgradeStats power p q cost = UpgradeStats cost eff buy ret h0 dh
+mkUpgradeStats :: (Real a, Real b) => Game -> Float -> Plant' a -> Plant' b -> Float -> UpgradeStats
+mkUpgradeStats g power p q cost = UpgradeStats cost eff buy ret h0 dh
     where
     eff = let v = buy + ret in if isNaN v then 1/0 else v
 
     buy = costH / power
     ret = costH / max 0 dh
 
-    costH  = cost / 3600 / fromIntegral tps
+    costH  = cost / 3600 / fromIntegral (gameTps g)
 
     h0   = plantNetHeat p
     dh   = plantNetHeat q - h0
@@ -764,14 +741,14 @@ allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = flip evalState (1/0) $ toReve
     --when (x < 0) $ traceShow (b, b'', s, s') $ return ()
 
     let cost = acc + buildCostFromTo b b''
-    let e = mkUpgradeStats (gamePower g) p q cost
+    let e = mkUpgradeStats g (gamePower g) p q cost
 
     lift $ modify (min $ upgradeEff e)
 
     return (e, b'')
 
 gamePowerH :: Game -> Float
-gamePowerH g = gamePower g * fromIntegral tps * 3600
+gamePowerH g = gamePower g * fromIntegral (gameTps g) * 3600
 
 autoFillBuild' :: Spec -> Build' Float -> Build' Float
 autoFillBuild' s b = {-# SCC "Build" #-} Build $ M.unionWith max

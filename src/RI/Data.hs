@@ -32,9 +32,6 @@ fusionG3_111 = Spec Fusion 1 Gen3 1 Pump 1 0 False
 
 fusionG4_122 :: Spec
 fusionG4_122 = Spec Fusion 1 Gen4 2 Pump 2 0 False
-
-thoriumIsl :: Spec
-thoriumIsl = Spec Thorium 1 Gen4 2 Pump 2 0 False
 --
 
 thoriumSHC :: Spec
@@ -99,10 +96,12 @@ prot1_2_12_2C = Spec Protactium 1 Gen4 2 GroundPump 12 2 True
 specs :: M.Map Plants [(Spec, Int)]
 specs = M.fromList [
         (Island, [
-            (fusionG3_122, 4),
-            {-(fusionG3_111, 8),
-            (fusionG4_122, 4),-}
-            (thoriumIsl, 4)
+            (fusionG3_122, 4)--, -- 1
+            --(Spec Thorium 1 Gen4 3 Pump 9 1 True, 1), -- 2
+            --(Spec Protactium 1 Gen4 3 Pump 9 1 True, 1) --, -- 3
+            --(Spec Fusion 1 Gen4 2 Pump 2 1 False, 4),
+            --(Spec Fusion 1 Gen4 1 Pump 1 0 False, 8),
+            --(Spec Thorium 1 Gen4 3 Pump 3 1 False, 2)
         ]),
         (Village, [
             (fusion122, 11)
@@ -127,7 +126,7 @@ specs = M.fromList [
             -- (thoriumSHCUg1_40_120, 1), -- never
             --(thoriumSHCG3Ug1_50_100, 1), -- never
             --(thoriumSHCG3Ug1_40_120, 1), -- never
-            --(protSHCUg1_40_120, 1), -- never
+            (protSHCUg1_40_120, 1), -- never
             (protSHCUg1_50_100, 1)
         ]),
         (Metro, [
@@ -147,13 +146,13 @@ specs = M.fromList [
             --(thorium1482, 22),
             --(thorium1261, 33),
             --(thorium1261C, 29),  -- never
-            (prot1_4_12_1C, 15)
+            (prot1_4_12_1C, 15),
+            (prot1261C, 30)
             {-,
-            (prot1_2_8_2C, 22),
-            (prot1261C, 29)-}
+            (prot1_2_8_2C, 22), --}
         ]),
         (EHC, [
-            (protSHCUg1_50_100, 1),
+            --(protSHCUg1_50_100, 1),
             (protFHC1_8_24C, 4),
             (protEHC1_4_16C, 8)
         ])
@@ -178,7 +177,7 @@ plantVillage :: Plant
 plantVillage = Plant
     (Build $ M.fromList
         [(CellHeat Fusion, 9)
-        ,(CellLife Fusion, 1)
+        ,(CellLife Fusion, 2)
         ,(GenEff, 74)
         ,(GenMaxWater, 39)
         ,(PumpWater GroundPump, 16)
@@ -189,13 +188,13 @@ plantVillage = Plant
 plantRegion :: Plant
 plantRegion = Plant
     (Build $ M.fromList
-        [(CellHeat Thorium, 7)
-        ,(CellLife Thorium, 1)
-        ,(IsoMult, 13)
+        [(CellHeat Thorium, 9)
+        ,(CellLife Thorium, 2)
+        ,(IsoMult, 11)
         ,(GenEff, 82)
-        ,(GenMaxWater, 50)
-        ,(PumpWater GroundPump, 22)
-        ,(ElemMaxWater, 24)])
+        ,(GenMaxWater, 52)
+        ,(PumpWater GroundPump, 23)
+        ,(ElemMaxWater, 25)])
     thorium1261
     9
 
@@ -243,27 +242,27 @@ plantCity = Plant
 plantSHC :: Plant
 plantSHC = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 3)
+        [(CellHeat Protactium, 4)
         ,(CellLife Protactium, 1)
-        ,(IsoMult, 13)
+        ,(IsoMult, 15)
         ,(GenEff, 82)
-        ,(GenMaxWater, 54)
-        ,(PumpWater GroundPump, 25)
-        ,(ElemMaxWater, 27)])
+        ,(GenMaxWater, 55)
+        ,(PumpWater GroundPump, 26)
+        ,(ElemMaxWater, 28)])
     protSHCUg1_50_100
     1
 
 plantMetro :: Plant
 plantMetro = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 0)
+        [(CellHeat Protactium, 2)
         ,(CellLife Protactium, 2)
-        ,(IsoMult, 9)
+        ,(IsoMult, 8)
         ,(GenEff, 90)
-        ,(GenMaxWater, 57)
-        ,(PumpWater GroundPump, 28)
-        ,(ElemMaxWater, 30)
-        ,(CircMult, 2)])
+        ,(GenMaxWater, 58)
+        ,(PumpWater GroundPump, 29)
+        ,(ElemMaxWater, 31)
+        ,(CircMult, 4)])
     prot1261C
     27
 
@@ -310,14 +309,14 @@ plantFHC = Plant
 plantMainland :: Plant
 plantMainland = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 3)
-        ,(CellLife Protactium, 1)
+        [(CellHeat Protactium, 5)
+        ,(CellLife Protactium, 2)
         ,(GenEff, 88)
-        ,(GenMaxWater, 57)
-        ,(ElemMaxWater, 29)
-        ,(PumpWater GroundPump, 28)
-        ,(IsoMult, 10)
-        ,(CircMult, 2)]
+        ,(GenMaxWater, 58)
+        ,(ElemMaxWater, 31)
+        ,(PumpWater GroundPump, 29)
+        ,(IsoMult, 9)
+        ,(CircMult, 4)]
     )
     prot1_4_12_1C
     15
@@ -347,13 +346,18 @@ game = Game {
 }
 
 enable :: [Plants]
-enable = [Region .. ] -- boundedEnum -- [SHC, FHC]
+enable =
+    -- [Island]
+    boundedEnum 
+    -- [Region .. ]
+    -- [SHC, FHC]
 
 enabledSpecs :: M.Map Plants [(Spec, Int)]
 enabledSpecs = M.filterWithKey (\ k _ -> k `elem` enable) specs 
 
 enabledGame :: Game
-enabledGame = game { gamePlant = M.mapWithKey (\ k x -> if k `elem` enable then x else mempty) $ gamePlant game }
+enabledGame = game
+    -- game { gamePlant = M.mapWithKey (\ k x -> if k `elem` enable then x else mempty) $ gamePlant game }
 
 main :: IO ()
 main = do
@@ -362,7 +366,7 @@ main = do
     putStrLn ""
 
     putStrLn "Upgrades:"
-    let steps' = hoist (hoist generalize) $ ListT.take 20 $ researchBest 4 enabledSpecs
+    let steps' = hoist (hoist generalize) $ ListT.take 40 $ researchBest 4 enabledSpecs
 
     _ <- flip runStateT enabledGame $ flip ListT.traverse_ steps' $ \ (g, a) -> do
         case a of
@@ -393,7 +397,7 @@ main = do
 
 showPower :: IO ()
 showPower = do
-    let stats = plantStats <$> gamePlant game
+    let stats = plantStats game <$> gamePlant game
     let total = fold $ M.elems stats
 
     forM_ (M.toList stats) $ \ (pn, s) -> do
@@ -403,25 +407,26 @@ showPower = do
         -- show pn ++ printf "(%.1f%%): " (100 * frac) ++ show stats
     putStrLn $ "Total: " ++ show total
 
-data PlantStats = PlantStats { plantPowerT :: Float, plantCellCostT :: Float, plantPowerNetT :: Float, plantPowerH :: Float, plantBat :: Float }
+data PlantStats = PlantStats { plantPowerT :: Float, plantCellCostT :: Float, plantPowerNetT :: Float, plantPowerH :: Float, plantCellCostH :: Float, plantBat :: Float }
 
 instance Show PlantStats where
     show stats = printf "power/t = % 8.2e (- %8.2e = % 8.2e), power/h = % 8.2e (- %8.2e), bat = % 8.2e"
-        (plantPowerT stats) (plantCellCostT stats) (plantPowerNetT stats) (plantPowerH stats) (3600 * fromIntegral tps * plantCellCostT stats) (plantBat stats)
+        (plantPowerT stats) (plantCellCostT stats) (plantPowerNetT stats) (plantPowerH stats) (plantCellCostH stats) (plantBat stats)
 
 instance Semigroup PlantStats where
-    (PlantStats x y z w v) <> (PlantStats x' y' z' w' v') = PlantStats (x + x') (y + y') (z + z') (w + w') (v + v')
+    (PlantStats x y z w v u) <> (PlantStats x' y' z' w' v' u') = PlantStats (x + x') (y + y') (z + z') (w + w') (v + v') (u + u')
 
 instance Monoid PlantStats where
-    mempty = PlantStats 0 0 0 0 0
+    mempty = PlantStats 0 0 0 0 0 0
 
-plantStats :: Plant -> PlantStats
-plantStats p = PlantStats h h' hn hh bat
+plantStats :: Game -> Plant -> PlantStats
+plantStats g p = PlantStats h h' hn hh hh' bat
     where
     hn = h - h'
     h  = plantHeat p
     h' = plantCellCost p
-    hh = hn * 3600 * fromIntegral tps
+    hh = hn * 3600 * fromIntegral (gameTps g)
+    hh' = h' * 3600 * fromIntegral (gameTps g)
     bat = hh * 10
 
 stepGame :: StateT Game IO (Game, UpgradeStats, Plants, Maybe Plant, Plant)
