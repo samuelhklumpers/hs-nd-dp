@@ -109,7 +109,8 @@ specs = M.fromList [
         ]),
         (Region, [
             --(fusion122, 18),
-            (thorium1261, 9)
+            (thorium1261, 9),
+            (Spec Thorium 1 Gen4 2 GroundPump 6 1 True, 8)
         ]),
         (City, [
             --(fusion122, 42),
@@ -127,14 +128,14 @@ specs = M.fromList [
             -- (thoriumSHCUg1_40_120, 1), -- never
             --(thoriumSHCG3Ug1_50_100, 1), -- never
             --(thoriumSHCG3Ug1_40_120, 1), -- never
-            --(protSHCUg1_40_120, 1), -- never
+            (protSHCUg1_40_120, 1), -- never?
             (protSHCUg1_50_100, 1)
         ]),
         (Metro, [
             --(thorium1148, 20),
             {-(thorium1482, 19),
             (thorium1261, 30),-}
-            (thorium1261C, 27),
+            --(thorium1261C, 27),
             (prot1_2_12_2C, 15), -- never?
             (prot1261C, 27)
         ]),
@@ -147,10 +148,9 @@ specs = M.fromList [
             --(thorium1482, 22),
             --(thorium1261, 33),
             --(thorium1261C, 29),  -- never
-            (prot1_4_12_1C, 15)
-            {-,
+            (prot1_4_12_1C, 15),
             (prot1_2_8_2C, 22),
-            (prot1261C, 29)-}
+            (prot1261C, 30)
         ]),
         (EHC, [
             (protSHCUg1_50_100, 1),
@@ -189,13 +189,13 @@ plantVillage = Plant
 plantRegion :: Plant
 plantRegion = Plant
     (Build $ M.fromList
-        [(CellHeat Thorium, 7)
-        ,(CellLife Thorium, 1)
-        ,(IsoMult, 13)
+        [(CellHeat Thorium, 9)
+        ,(CellLife Thorium, 2)
+        ,(IsoMult, 11)
         ,(GenEff, 82)
-        ,(GenMaxWater, 50)
-        ,(PumpWater GroundPump, 22)
-        ,(ElemMaxWater, 24)])
+        ,(GenMaxWater, 52)
+        ,(PumpWater GroundPump, 23)
+        ,(ElemMaxWater, 25)])
     thorium1261
     9
 
@@ -243,27 +243,27 @@ plantCity = Plant
 plantSHC :: Plant
 plantSHC = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 3)
+        [(CellHeat Protactium, 4)
         ,(CellLife Protactium, 1)
-        ,(IsoMult, 13)
+        ,(IsoMult, 15)
         ,(GenEff, 82)
-        ,(GenMaxWater, 54)
-        ,(PumpWater GroundPump, 25)
-        ,(ElemMaxWater, 27)])
+        ,(GenMaxWater, 55)
+        ,(PumpWater GroundPump, 26)
+        ,(ElemMaxWater, 28)])
     protSHCUg1_50_100
     1
 
 plantMetro :: Plant
 plantMetro = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 0)
+        [(CellHeat Protactium, 2)
         ,(CellLife Protactium, 2)
-        ,(IsoMult, 9)
+        ,(IsoMult, 8)
         ,(GenEff, 90)
-        ,(GenMaxWater, 57)
-        ,(PumpWater GroundPump, 28)
-        ,(ElemMaxWater, 30)
-        ,(CircMult, 2)])
+        ,(GenMaxWater, 58)
+        ,(PumpWater GroundPump, 29)
+        ,(ElemMaxWater, 31)
+        ,(CircMult, 4)])
     prot1261C
     27
 
@@ -310,14 +310,14 @@ plantFHC = Plant
 plantMainland :: Plant
 plantMainland = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 3)
-        ,(CellLife Protactium, 1)
+        [(CellHeat Protactium, 5)
+        ,(CellLife Protactium, 2)
         ,(GenEff, 88)
-        ,(GenMaxWater, 57)
-        ,(ElemMaxWater, 29)
-        ,(PumpWater GroundPump, 28)
-        ,(IsoMult, 10)
-        ,(CircMult, 2)]
+        ,(GenMaxWater, 58)
+        ,(ElemMaxWater, 31)
+        ,(PumpWater GroundPump, 29)
+        ,(IsoMult, 9)
+        ,(CircMult, 4)]
     )
     prot1_4_12_1C
     15
@@ -346,6 +346,8 @@ game = Game {
     gameResearch = [RProtactium, RCirc]
 }
 
+-- TODO discount cell switches
+
 enable :: [Plants]
 enable = [Region .. ] -- boundedEnum -- [SHC, FHC]
 
@@ -362,7 +364,7 @@ main = do
     putStrLn ""
 
     putStrLn "Upgrades:"
-    let steps' = hoist (hoist generalize) $ ListT.take 20 $ researchBest 4 enabledSpecs
+    let steps' = hoist (hoist generalize) $ ListT.take 40 $ researchBest 4 enabledSpecs
 
     _ <- flip runStateT enabledGame $ flip ListT.traverse_ steps' $ \ (g, a) -> do
         case a of

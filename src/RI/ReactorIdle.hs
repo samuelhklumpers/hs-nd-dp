@@ -331,7 +331,7 @@ instance Show UpgradeStats where
 type Specs = M.Map Plants [(Spec, Int)]
 
 tps :: Int
-tps = 5
+tps = 6
 
 data Research = RProtactium | RCirc deriving (Eq, Ord, Show)
 
