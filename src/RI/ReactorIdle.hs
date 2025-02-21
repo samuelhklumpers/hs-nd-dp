@@ -485,11 +485,33 @@ researchBest' block d lookahead s = do
             -- Does this upgrade use research we don't have yet?
             case dropWhile (`elem` gameResearch g1) $ specPrereqs $ plantSpec p' of
                 [] -> do
-                    -- 2. If not, yield the upgrade and update the state to after applying the upgrade
-                    {- _ <- applyUpgrade pn p'
-                    cons (g1, Left o) $ researchBest' block s -}
-                    applyUpgradeLifted pn p'
-                    <> researchBest' block d lookahead s
+                    if RChrono4 `notElem` gameResearch g1 then do
+                        -- temp hack for chrono research
+                        let (_, g2a1) = applyUpgrade' g1 pn p'
+                        let (_, g2a2) = doResearch' g2a1 RChrono4
+
+                        let (_, g2b1) = doResearch' g1 RChrono4
+                        let (_, g2b2) = applyUpgrade' g2b1 pn p'
+
+
+                        when (d == 0) $ do
+                            let l = gameClock g2a2
+                            let r = gameClock g2b2
+                            traceM $ "D" ++ show d ++ ": " ++ show l ++ (if l < r then " < " else " > ") ++ show r
+
+                        if gameClock g2a2 < gameClock g2b2 then
+                            applyUpgradeLifted pn p'
+                            <> researchBest' block d lookahead s
+                        else do
+                            doResearchLifted RChrono4
+                            <> applyUpgradeLifted pn p'
+                            <> researchBest' block d lookahead s
+                    else do
+                        -- 2. If not, yield the upgrade and update the state to after applying the upgrade
+                        {- _ <- applyUpgrade pn p'
+                        cons (g1, Left o) $ researchBest' block s -}
+                        applyUpgradeLifted pn p'
+                        <> researchBest' block d lookahead s
                 (prereq:_) -> do
                     let block' = prereq : researchPrereq prereq
 

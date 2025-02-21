@@ -112,7 +112,7 @@ specs = M.fromList [
         ]),
         (City, [
             --(fusion122, 42),
-            (thorium1482, 13),
+            -- (thorium1482, 13), -- at first
             --(thorium1261, 21), -- often
             --(thorium1_4_12_1C, 10), -- never
             --(prot1_4_12_1C, 8), -- never
@@ -127,7 +127,8 @@ specs = M.fromList [
             --(thoriumSHCG3Ug1_50_100, 1), -- never
             --(thoriumSHCG3Ug1_40_120, 1), -- never
             (protSHCUg1_40_120, 1), -- never
-            (protSHCUg1_50_100, 1)
+            (protSHCUg1_50_100, 1),
+            (Spec Protactium 1 Gen4 36 Pump 64 4 True, 1)
         ]),
         (Metro, [
             --(thorium1148, 20),
@@ -334,19 +335,20 @@ game = Game {
         (FHC, plantFHC),
         (Mainland, plantMainland)],
     gameClock = 0,
-    gameCurrentResearch = 200e12,
+    gameCurrentResearch = 2.6e15,
     gameResearchL = M.fromList [
-        (Island, 56),
-        (Village, 58),
-        (Region, 59),
-        (City, 61),
+        (Island, 58),
+        (Village, 60),
+        (Region, 61),
+        (City, 63),
         (Metro, 62),
-        (Mainland, 62)],
+        (Mainland, 64)],
     gameResearch = [RProtactium, RCirc]
 }
 
 enable :: [Plants]
 enable =
+    --[Mainland]
     -- [Island]
     boundedEnum 
     -- [Region .. ]
@@ -473,6 +475,9 @@ showSteps = do
 {-
 -- when plantBuild plantMetro M.! (CellHeat Thorium) == 4., start researching for Gen4
 -- when plantBuild plantMainland M.! (CellHeat Thorium) ==  14, start researching Protactium (or perhaps earlier)
+
+-- you want to setup for RChrono4 sooner than you think
+-- when plantBuild plantMainland M.! (CellHeat Protactium) == 6, start researching RChrono4 (or perhaps way earlier)
 
 -- TODO unfold a big upgrade into viable sub-upgrades
 -}
