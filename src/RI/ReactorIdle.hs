@@ -330,7 +330,6 @@ instance Show UpgradeStats where
 
 type Specs = M.Map Plants [(Spec, Int)]
 
-
 data Research = RProtactium | RCirc | RChrono4 deriving (Eq, Ord, Show)
 
 researchPrereq :: Research -> [Research]

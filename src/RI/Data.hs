@@ -108,7 +108,8 @@ specs = M.fromList [
         ]),
         (Region, [
             --(fusion122, 18),
-            (thorium1261, 9)
+            (thorium1261, 9),
+            (Spec Thorium 1 Gen4 2 GroundPump 6 1 True, 8)
         ]),
         (City, [
             --(fusion122, 42),
@@ -134,7 +135,7 @@ specs = M.fromList [
             --(thorium1148, 20),
             {-(thorium1482, 19),
             (thorium1261, 30),-}
-            (thorium1261C, 27),
+            --(thorium1261C, 27),
             (prot1_2_12_2C, 15), -- never?
             (prot1261C, 27)
         ]),
@@ -148,9 +149,8 @@ specs = M.fromList [
             --(thorium1261, 33),
             --(thorium1261C, 29),  -- never
             (prot1_4_12_1C, 15),
+            (prot1_2_8_2C, 22),
             (prot1261C, 30)
-            {-,
-            (prot1_2_8_2C, 22), --}
         ]),
         (EHC, [
             --(protSHCUg1_50_100, 1),
@@ -343,8 +343,10 @@ game = Game {
         (City, 63),
         (Metro, 62),
         (Mainland, 64)],
-    gameResearch = [RProtactium, RCirc]
+    gameResearch = [RProtactium, RCirc, RChrono4]
 }
+
+-- TODO discount cell switches
 
 enable :: [Plants]
 enable =
