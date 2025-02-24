@@ -32,7 +32,7 @@ dependencies:
 
 ghc-options:
 - -O2
-# - -Wall
+- -Wall
 - -Wcompat
 - -Widentities
 - -Wincomplete-record-updates

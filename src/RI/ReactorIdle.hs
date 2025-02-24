@@ -49,7 +49,7 @@ boundedEnum = enumFrom minBound
 pow :: (Floating a, Real b) => a -> b -> a
 pow b e = b ** realToFrac e
 
-data Cell = Thermo | Fusion | Thorium | Protactium
+data Cell = Thermo | Fusion | Thorium | Protactium | Curium
     deriving (Eq, Ord, Show, Generic, Hashable)
 
 cellHeat :: (Real a, Floating b) => Cell -> a -> b
@@ -61,6 +61,7 @@ cellBaseHeat c = case c of
     Fusion  -> 2.5e9
     Thorium -> 150e9
     Protactium -> 9e12
+    Curium -> 630e12
 
 cellLife :: (Real a, Floating b) => Build' a -> Cell -> b
 cellLife b cT = 800 * pow 2 (M.findWithDefault 0 (CellLife cT) (runBuild b))
@@ -71,6 +72,7 @@ cellHeatCostBase c = case c of
     Fusion  -> 100e12
     Thorium -> 10e15
     Protactium -> 1e18
+    Curium -> 50e18
 
 cellLifeCostBase :: Fractional a => Cell -> a
 cellLifeCostBase c = case c of
@@ -78,6 +80,7 @@ cellLifeCostBase c = case c of
     Fusion  -> 500e12
     Thorium -> 50e15
     Protactium -> 5e18
+    Curium -> 250e18
 
 cellCost :: Fractional a => Cell -> a
 cellCost c = case c of
@@ -85,6 +88,7 @@ cellCost c = case c of
     Fusion  -> 800e9
     Thorium -> 72e12
     Protactium -> 5.04e15
+    Curium -> 302.4e15
 
 
 data Gen = Gen2 | Gen3 | Gen4 | Gen5
@@ -119,7 +123,7 @@ genCost g = case g of
     Gen2 -> 2.5e6
     Gen3 -> 10e12
     Gen4 -> 50e15
-    Gen5 -> 12.5e15 -- ???
+    Gen5 -> 12.5e18
 
 
 data Pump = Pump | GroundPump
@@ -320,24 +324,29 @@ gamePower :: Game -> Float
 gamePower g = sum $ fmap plantHeat $ M.elems $ gamePlant g
 
 
-data UpgradeStats = UpgradeStats { upgradeTotalCost :: Float, upgradeEff :: Float, upgradeBuy :: Float, upgradeRet :: Float, heat0 :: Float, dHeat :: Float } deriving Eq
+data UpgradeStats = UpgradeStats { upgradeTotalCost :: Float, upgradeEff :: Float, upgradeBuy :: Float, upgradeRet :: Float, heat0 :: Float, dHeat :: Float , hTotal :: Float } deriving Eq
 
 instance Ord UpgradeStats where
     compare x y = compare (upgradeEff x) (upgradeEff y)
 
 instance Show UpgradeStats where
-    show (UpgradeStats c e b r h0 dh) = printf "% 6.2f = % 6.2f + % 6.2f -> +% 8.2e (% 6.2f%%) for % 8.2e" e b r dh (100 * dh / h0) c
+    show (UpgradeStats c e b r h0 dh gh) = printf "% 6.2f = % 6.2f + % 6.2f -> +% 8.2e (% 6.2f%% / % 6.2f%%) for % 8.2e" e b r dh (100 * dh / h0) (100 * dh / gh) c
 
 type Specs = M.Map Plants [(Spec, Int)]
 
-data Research = RProtactium | RCirc | RChrono4 deriving (Eq, Ord, Show)
+data Research = RProtactium | RCirc | RChrono4 | RCurium | RGen5 deriving (Eq, Ord, Show)
 
 researchPrereq :: Research -> [Research]
 researchPrereq = \case
     -- RProtactium -> [RCirc] -- TODO hack to avoid double research tehe
     RChrono4    -> [RProtactium]
     RCirc       -> [RProtactium]
+    RGen5       -> [RCurium]
+    RCurium     -> [RGen5]
     _ -> []
+
+-- TODO you could implement researching new research centers but Research3 is 
+-- so good it's basically always yes
 
 researchCost :: [Research] -> Research -> (Float, [Research])
 researchCost xs r = (sum $ researchCost' <$> r:ys, r:ys)
@@ -349,6 +358,8 @@ researchCost' = \case
     RProtactium -> 2.5e15
     RCirc -> 1.25e15
     RChrono4 -> 10e15
+    RCurium -> 125e15
+    RGen5 -> 62.5e15
 
 plantTiles :: Plants -> Int
 plantTiles = \case
@@ -380,18 +391,8 @@ researchCorrection g = (rb', cb', floor <$> ds)
     cb' = sum $ (1.78 **) <$> ds
     rb' = sum $ M.intersectionWith (*) ts $ (1.25 **) <$> ds
 
-
-
-{-
-plantPrereqs :: Plant -> [Research]
-plantPrereqs (Plant b s n) = buildPrereqs b ++ specPrereqs s
-
-buildPrereqs :: Build -> [Research]
-buildPrereqs _ = []
--}
-
 specPrereqs :: Spec -> [Research]
-specPrereqs s = [RCirc | specCirc s] ++ [RProtactium | specCellType s == Protactium]
+specPrereqs s = [RCirc | specCirc s] ++ [RProtactium | specCellType s == Protactium] ++ [RCurium | specCellType s == Curium] ++ [RGen5 | specGenType s == Gen5]
 
 takeWhileT :: (Monad m) => (a -> Bool) -> ListT m a -> ListT m a
 takeWhileT f t = do
@@ -606,45 +607,39 @@ gameBest :: [Research] -> Specs -> Game -> Maybe (UpgradeStats, Plants, Plant)
 gameBest block s g = minimum' $ gameBest' block s g
 
 gameBest' :: [Research] -> Specs -> Game -> [(UpgradeStats, Plants, Plant)]
-gameBest' block specs g = catMaybes $ do
-    pn <- --[Island] 
-        boundedEnum :: [Plants]
+gameBest' block specs g = catMaybes $ flip evalState (1/0) $ toReverseList $ do
+    pn <- ListT.fromFoldable (boundedEnum :: [Plants])
 
     let (p, acc) = maybe (mempty, plantBuyCost pn) (, 0) (gamePlant g M.!? pn)
 
-    case plantBest block specs g pn p acc of
+    pb <- lift $ plantBest block specs g pn p acc
+
+    case pb of
         Nothing -> return Nothing
         Just (u, p') -> do
             return $ Just (u, pn, p')
 
-plantBest :: [Research] -> Specs -> Game -> Plants -> Plant -> Float -> Maybe (UpgradeStats, Plant)
+plantBest :: [Research] -> Specs -> Game -> Plants -> Plant -> Float -> State Float (Maybe (UpgradeStats, Plant))
 plantBest block specs g pn p acc = case specs M.!? pn of
-    Nothing -> Nothing
-    Just sns -> minimum' $ do
-        --traceShow pn $ return ()
+    Nothing -> return Nothing
+    Just sns -> fmap minimum' $ toReverseList $ do
         let (Plant _ s n) = p
-        sn@(s', n') <- sns
+        sn@(s', n') <- ListT.fromFoldable sns
 
         guard (not $ any (specUsesResearch s') block)
         let acc' = max 0 $ fromIntegral n' * specCost s' - fromIntegral n * specCost s
 
-        case buildBest g p sn (acc' + acc) of
-            Nothing -> []
+        bb <- lift $ buildBest g p sn (acc' + acc)
+        case bb  of
+            Nothing -> mempty
             Just (u, b') -> do
-                --traceM $ "Prereqs " ++ show (specPrereqs s') ++ ", Block " ++ show block
                 return (u, Plant b' s' n')
 
 minimum' :: (Foldable t, Ord a) => t a -> Maybe a
 minimum' = fmap getMin . foldMap' (Just . Min)
 
-buildBest :: Game -> Plant -> (Spec, Int) -> Float -> Maybe (UpgradeStats, Build)
-buildBest g p@(Plant b _ _) (s', n') acc = go b
-    where
-    go b' = case bs' of
-            [] -> Just (UpgradeStats 0 (1/0) 0 0 0 0, b')
-            bs -> minimum' bs
-        where
-        bs' = allBuilds g p (Plant b' s' n') acc
+buildBest :: Game -> Plant -> (Spec, Int) -> Float -> State Float (Maybe (UpgradeStats, Build))
+buildBest g p@(Plant b _ _) (s', n') acc = minimum' <$> allBuilds g p (Plant b s' n') acc
 
 upgradeEffect :: (Real a, Real b) => Game -> Float -> Plant' a -> Plant' b -> Float -> Float
 upgradeEffect g power p q cost = upgradeEff $ mkUpgradeStats g power p q cost
@@ -673,7 +668,7 @@ getUpgradeStats' g pn q = mkUpgradeStats g (gamePower g) p q c
     c = plantCostFromTo p q + maybe (plantBuyCost pn) (const 0) p'
 
 mkUpgradeStats :: (Real a, Real b) => Game -> Float -> Plant' a -> Plant' b -> Float -> UpgradeStats
-mkUpgradeStats g power p q cost = UpgradeStats cost eff buy ret h0 dh
+mkUpgradeStats g power p q cost = UpgradeStats cost eff buy ret h0 dh gh
     where
     eff = let v = buy + ret in if isNaN v then 1/0 else v
 
@@ -684,6 +679,7 @@ mkUpgradeStats g power p q cost = UpgradeStats cost eff buy ret h0 dh
 
     h0   = plantNetHeat p
     dh   = plantNetHeat q - h0
+    gh   = gamePower g
 
 roundBuild :: Build' Float -> Build
 roundBuild (Build b) = Build $ M.mapWithKey go b
@@ -698,8 +694,8 @@ roundBuild (Build b) = Build $ M.mapWithKey go b
 -- and we want to know whether eta g b b1 < eta g b b2.
 -- Can we change this to eta' : Build -> X and eta'' : X -> Game -> Build -> Float for some concrete X?
 -- and then hopefully from X extract conditions when x1 < x2.
-allBuilds :: Game -> Plant -> Plant -> Float -> [(UpgradeStats, Build)]
-allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = flip evalState (1/0) $ toReverseList $ do
+allBuilds :: Game -> Plant -> Plant -> Float -> State Float [(UpgradeStats, Build)]
+allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = toReverseList $ do
     let (Spec cT _ _ _ _ _ iN ciN) = s'
 
     let lowerB = M.unionWith max (runBuild b) (runBuild b')
@@ -707,59 +703,53 @@ allBuilds g p@(Plant b _ _) (Plant b' s' n') acc = flip evalState (1/0) $ toReve
     let ciL0 = M.findWithDefault 0 CircMult lowerB
     --let geL0 = max 60 $ M.findWithDefault 0 GenEff lowerB
     let clL0 = M.findWithDefault 0 (CellLife cT) lowerB
+    let cL0 = M.findWithDefault 0 (CellHeat cT) lowerB
 
     let lowerH = plantNetHeat p :: Float
     let pPH = gamePowerH g
 
     iL <- fromFoldable $ if iN > 0 then [0..20] else [0]
-    let t0 = upgradeToCost IsoMult iL / pPH
+    let c0 = upgradeToCost IsoMult iL
 
     upperT <- lift get
-    guard (t0 < upperT)
+    guard (c0 / pPH < upperT)
 
-    cL <- fromFoldable [0..20]
-    let t1 = t0 + upgradeToCost (CellHeat cT) cL / pPH
+    cL <- fromFoldable [0..cL0 + 15]
+    let c1 = c0 + upgradeToCost (CellHeat cT) cL
     let hI = fromIntegral (n' * specCells s') * isoMult (specIsos s') iL  * cellHeat cT cL :: Float
     guard (hI > lowerH)
 
-    upperT <- lift get
-    guard (t1 < upperT)
+    let dpP = hI - lowerH
+    let dpPH = dpP * 3600 * fromIntegral (gameTps g)
 
-    ciL <- fromFoldable $ if ciN then [max 0 (ciL0 - 1)..20] else [0]
-    let t2 = t1 + upgradeToCost CircMult ciL / pPH
-    upperT <- lift get
-    guard (t2 < upperT)
+    let tFactor = 1 / pPH + 1 / dpPH
 
-    gmwL <- fromFoldable [max 0 (gmwL0 - 1)..80]
-    let t3 = t2 + upgradeToCost GenMaxWater gmwL / pPH
     upperT <- lift get
-    guard (t3 < upperT)
+    guard (c1 * tFactor < upperT)
 
-    clL <- fromFoldable [clL0 .. 3]
-    let t4 = t3 + upgradeToCost (CellLife cT) clL / pPH
+    ciL <- fromFoldable $ if ciN then [max 0 (ciL0 - 1)..ciL0 + 15] else [0]
+    let c2 = c1 + upgradeToCost CircMult ciL
     upperT <- lift get
-    guard (t4 < upperT)
+    guard (c2 * tFactor < upperT)
 
-{-
-    geL <- fromFoldable [geL0 - 1..90]
-    let cGE = cGMW + upgradeToCost GenEff geL / pPH
+    gmwL <- fromFoldable [max 0 (gmwL0 - 1)..gmwL0 + 80]
+    let c3 = c2 + upgradeToCost GenMaxWater gmwL
     upperT <- lift get
-    --traceShow (cGE, upperT) $ return ()
-    guard (cGE < upperT) 
--}
+    guard (c3 * tFactor < upperT)
+
+    clL <- fromFoldable [clL0 .. clL0 + 4]
+    let c4 = c3 + upgradeToCost (CellLife cT) clL
+    upperT <- lift get
+    guard (c4 * tFactor < upperT)
 
     let b'' = roundBuild $ autoFillBuild' s' $ Build $ fmap fromIntegral $ lowerB
             & M.insert (CellHeat cT) cL
             & (if iL > 0 then M.insert IsoMult iL else id)
             & M.insert GenMaxWater gmwL
---            & M.insert GenEff geL
             & (if ciL > 0 then M.insert CircMult ciL else id)
             & (if clL > 0 then M.insert (CellLife cT) clL else id)
 
     let q = Plant b'' s' n'
-
-    --let x = buildCostFromTo b b''
-    --when (x < 0) $ traceShow (b, b'', s, s') $ return ()
 
     let cost = acc + buildCostFromTo b b''
     let e = mkUpgradeStats g (gamePower g) p q cost

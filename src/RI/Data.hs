@@ -96,66 +96,76 @@ prot1_2_12_2C = Spec Protactium 1 Gen4 2 GroundPump 12 2 True
 specs :: M.Map Plants [(Spec, Int)]
 specs = M.fromList [
         (Island, [
-            (fusionG3_122, 4)--, -- 1
-            --(Spec Thorium 1 Gen4 3 Pump 9 1 True, 1), -- 2
-            --(Spec Protactium 1 Gen4 3 Pump 9 1 True, 1) --, -- 3
-            --(Spec Fusion 1 Gen4 2 Pump 2 1 False, 4),
-            --(Spec Fusion 1 Gen4 1 Pump 1 0 False, 8),
+            (fusionG3_122, 4),
+            (Spec Thorium 1 Gen4 3 Pump 9 1 True, 1),
+            (Spec Protactium 1 Gen4 3 Pump 9 1 True, 1),
+            (Spec Thorium 1 Gen4 6 Pump 12 1 False, 1),
+            (Spec Protactium 1 Gen4 6 Pump 12 1 False, 1)
             --(Spec Thorium 1 Gen4 3 Pump 3 1 False, 2)
         ]),
         (Village, [
-            (fusion122, 11)
+            (fusion122, 11),
+            (Spec Thorium 1 Gen4 2 Pump 6 1 True, 5),
+            (Spec Protactium 1 Gen4 2 Pump 6 1 True, 5),
+            (Spec Curium 1 Gen5 3 Pump 9 1 True, 4)
         ]),
         (Region, [
             --(fusion122, 18),
             (thorium1261, 9),
-            (Spec Thorium 1 Gen4 2 GroundPump 6 1 True, 8)
+            (Spec Thorium 1 Gen4 2 GroundPump 6 1 True, 8),
+            (Spec Protactium 1 Gen4 2 GroundPump 6 1 True, 8),
+            (Spec Curium 1 Gen4 4 GroundPump 12 1 True, 5)
         ]),
         (City, [
             --(fusion122, 42),
-            -- (thorium1482, 13), -- at first
-            --(thorium1261, 21), -- often
-            --(thorium1_4_12_1C, 10), -- never
-            --(prot1_4_12_1C, 8), -- never
+            --(thorium1482, 13),
+            --(thorium1261, 21),
             (thorium1261C, 19),
-            (prot1261C, 19)
+            (Spec Protactium 1 Gen4 2 GroundPump 6 1 True, 19),
+            (Spec Protactium 1 Gen5 2 GroundPump 6 1 True, 19),
+            (Spec Curium 1 Gen5 4 GroundPump 12 1 True, 10)
         ]),
         (SHC, [
             --(thoriumSHC, 1),
-            --(thoriumG4_SHC, 1), -- never
-            --(thoriumSHCUg1_50_100, 1), -- never
-            -- (thoriumSHCUg1_40_120, 1), -- never
-            --(thoriumSHCG3Ug1_50_100, 1), -- never
-            --(thoriumSHCG3Ug1_40_120, 1), -- never
-            (protSHCUg1_40_120, 1), -- never
+            (protSHCUg1_40_120, 1),
             (protSHCUg1_50_100, 1),
-            (Spec Protactium 1 Gen4 36 Pump 64 4 True, 1)
+            (Spec Protactium 1 Gen4 36 Pump 64 4 True, 1),
+            (Spec Protactium 1 Gen4 28 Pump 84 4 True, 1),
+            (Spec Protactium 1 Gen5 28 Pump 84 4 True, 1)
         ]),
         (Metro, [
             --(thorium1148, 20),
-            {-(thorium1482, 19),
-            (thorium1261, 30),-}
+            --(thorium1482, 19),
+            --(thorium1261, 30),
             --(thorium1261C, 27),
-            (prot1_2_12_2C, 15), -- never?
-            (prot1261C, 27)
+            --(Spec Protactium 1 Gen4 2 GroundPump 12 2 True, 15),  -- notably never!
+            -- the best 1:3:9:1 build I can find is 18, which is always worse than 1:2:6:1 for 27
+            (Spec Protactium 1 Gen4 2 GroundPump 6 1 True, 27),
+            (Spec Curium 1 Gen5 2 GroundPump 6 2 True, 21),
+            (Spec Curium 1 Gen5 4 GroundPump 12 1 True, 14),
+            (Spec Curium 1 Gen5 4 GroundPump 12 2 True, 12)
         ]),
         (FHC, [
             --(thoriumFHC, 1),
             (protSHCUg1_50_100, 1),
-            (protFHC1_8_24C, 4)
+            (protFHC1_8_24C, 4),
+            (Spec Curium 1 Gen5 9 GroundPump 27 3 True, 4)
         ]),
         (Mainland, [
             --(thorium1482, 22),
             --(thorium1261, 33),
-            --(thorium1261C, 29),  -- never
             (prot1_4_12_1C, 15),
             (prot1_2_8_2C, 22),
-            (prot1261C, 30)
+            (prot1261C, 30),
+            (Spec Protactium 1 Gen5 2 GroundPump 6 1 True, 30),
+            (Spec Curium 1 Gen5 4 GroundPump 12 1 True, 16),
+            (Spec Curium 1 Gen5 4 GroundPump 12 2 True, 14)
         ]),
         (EHC, [
-            --(protSHCUg1_50_100, 1),
             (protFHC1_8_24C, 4),
-            (protEHC1_4_16C, 8)
+            (Spec Protactium 1 Gen4 4 GroundPump 16 2 True, 8),
+            (Spec Protactium 1 Gen5 4 GroundPump 16 2 True, 8),
+            (Spec Curium 1 Gen5 4 GroundPump 16 2 True, 8)
         ])
     ]
 
@@ -189,138 +199,85 @@ plantVillage = Plant
 plantRegion :: Plant
 plantRegion = Plant
     (Build $ M.fromList
-        [(CellHeat Thorium, 9)
+        [(CellHeat Thorium, 12)
         ,(CellLife Thorium, 2)
-        ,(IsoMult, 11)
+        ,(IsoMult, 14)
         ,(GenEff, 82)
         ,(GenMaxWater, 52)
-        ,(PumpWater GroundPump, 23)
-        ,(ElemMaxWater, 25)])
+        ,(PumpWater GroundPump, 25)
+        ,(ElemMaxWater, 27)])
     thorium1261
     9
 
-{-
-plantRegion :: Plant
-plantRegion = Plant
-    (Build $ M.fromList
-        [(CellHeat Fusion, 10)
-        ,(GenEff, 74)
-        ,(GenMaxWater, 41)
-        ,(PumpWater GroundPump, 17)
-        ,(ElemMaxWater, 19)])
-    fusion122
-    18
--}
-
 plantCity :: Plant
 plantCity = Plant
     (Build $ M.fromList
-        [(CellHeat Thorium, 14)
-        ,(CellLife Thorium, 2)
-        ,(IsoMult, 15)
+        [(CellHeat Protactium, 2)
+        ,(CellLife Protactium, 2)
+        ,(IsoMult, 8)
         ,(GenEff, 87)
-        ,(GenMaxWater, 54)
-        ,(PumpWater GroundPump, 26)
-        ,(ElemMaxWater, 28)
-        ,(CircMult, 1)])
-    thorium1261C
+        ,(GenMaxWater, 58)
+        ,(PumpWater GroundPump, 29)
+        ,(ElemMaxWater, 31)
+        ,(CircMult, 4)])
+    prot1261C
     19
-
-{-
-plantCity :: Plant
-plantCity = Plant
-    (Build $ M.fromList
-        [(CellHeat Fusion, 14)
-        ,(GenEff, 74)
-        ,(GenMaxWater, 44)
-        ,(PumpWater GroundPump, 19)
-        ,(ElemMaxWater, 20)])
-    fusion122 -- thorium1482
-    42
--}
-
 
 plantSHC :: Plant
 plantSHC = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 4)
+        [(CellHeat Protactium, 6)
         ,(CellLife Protactium, 1)
         ,(IsoMult, 15)
         ,(GenEff, 82)
-        ,(GenMaxWater, 55)
-        ,(PumpWater GroundPump, 26)
-        ,(ElemMaxWater, 28)])
+        ,(GenMaxWater, 57)
+        ,(PumpWater GroundPump, 27)
+        ,(ElemMaxWater, 29)])
     protSHCUg1_50_100
     1
 
 plantMetro :: Plant
 plantMetro = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 2)
+        [(CellHeat Protactium, 3)
         ,(CellLife Protactium, 2)
-        ,(IsoMult, 8)
+        ,(IsoMult, 14)
         ,(GenEff, 90)
-        ,(GenMaxWater, 58)
-        ,(PumpWater GroundPump, 29)
-        ,(ElemMaxWater, 31)
+        ,(GenMaxWater, 60)
+        ,(PumpWater GroundPump, 30)
+        ,(ElemMaxWater, 32)
         ,(CircMult, 4)])
     prot1261C
     27
 
-{-
-plantMetro :: Plant
-plantMetro = Plant
-    (Build $ M.fromList
-        [(CellHeat Thorium, 9)
-        ,(IsoMult, 9)
-        ,(GenEff, 85)
-        ,(GenMaxWater, 49)
-        ,(PumpWater GroundPump, 22)
-        ,(ElemMaxWater, 24)])
-    thorium1148
-    20
-
-plantMetro :: Plant
-plantMetro = Plant
-    (Build $ M.fromList
-        [(CellHeat Thorium, 7)
-        ,(IsoMult, 9)
-        ,(GenEff, 79)
-        ,(GenMaxWater, 48)
-        ,(PumpWater GroundPump, 21)
-        ,(ElemMaxWater, 22)])
-    thorium1148
-    20
--}
-
 plantFHC :: Plant
 plantFHC = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 2)
+        [(CellHeat Protactium, 5)
         ,(CellLife Protactium, 1)
-        ,(IsoMult, 7)
-        ,(GenEff, 82)
-        ,(GenMaxWater, 55)
-        ,(PumpWater GroundPump, 27)
-        ,(ElemMaxWater, 29)
-        ,(CircMult, 3)])
+        ,(IsoMult, 9)
+        ,(GenEff, 83)
+        ,(GenMaxWater, 58)
+        ,(PumpWater GroundPump, 29)
+        ,(ElemMaxWater, 31)
+        ,(CircMult, 4)])
     protFHC1_8_24C
     4
 
 plantMainland :: Plant
 plantMainland = Plant
     (Build $ M.fromList
-        [(CellHeat Protactium, 5)
+        [(CellHeat Protactium, 6)
         ,(CellLife Protactium, 2)
         ,(GenEff, 88)
-        ,(GenMaxWater, 58)
-        ,(ElemMaxWater, 31)
-        ,(PumpWater GroundPump, 29)
-        ,(IsoMult, 9)
-        ,(CircMult, 4)]
+        ,(GenMaxWater, 61)
+        ,(ElemMaxWater, 33)
+        ,(PumpWater GroundPump, 31)
+        ,(IsoMult, 6)
+        ,(CircMult, 6)]
     )
-    prot1_4_12_1C
-    15
+    prot1261C
+    30
 
 --
 game :: Game
